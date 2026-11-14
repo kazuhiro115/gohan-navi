@@ -47,7 +47,7 @@ h1{font-size:22px;margin:0;font-weight:900;white-space:nowrap}
 .tabs button{border:0;background:none;padding:9px 16px;border-radius:999px;font-weight:700;color:var(--sub)}
 .tabs button.on{background:var(--accent);color:#fff}
 .bnav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:1px solid var(--line);
-  display:grid;grid-template-columns:repeat(4,1fr);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+  display:grid;grid-template-columns:repeat(5,1fr);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
 .bnav button{border:0;background:none;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--sub);font-weight:700}
 .bnav .ic{font-size:21px;line-height:1}
 .bnav button.on{color:var(--accent)}
@@ -177,6 +177,24 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 .err{color:var(--low);font-size:12px;margin-top:6px}
 .attr{font-size:11px;color:var(--sub);text-align:center;margin-top:18px}
 .pc-add{display:none}
+.calhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.calhead h2{margin:0}
+.calnav{display:flex;gap:6px}
+.calg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.calg .dow{font-size:11px;color:var(--sub);text-align:center;font-weight:700;padding:2px 0}
+.calg .dow.sun{color:var(--low)} .calg .dow.sat{color:#2563eb}
+.cday{min-height:58px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:4px;text-align:left;display:flex;flex-direction:column;gap:2px;min-width:0;cursor:pointer;font:inherit;color:inherit}
+.cday .n{font-size:12px;font-weight:700}
+.cday.out{opacity:.35}
+.cday.today{border-color:var(--accent);border-width:2px}
+.cday.sel{background:var(--accent-l);border-color:var(--accent)}
+.cday.has{background:var(--card)}
+.cday .em{font-size:14px;line-height:1.1;letter-spacing:-1px;white-space:nowrap;overflow:hidden}
+.cday .nm{font-size:11px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none}
+.cday .more{font-size:10px;color:var(--sub);display:none}
+.calsum{font-size:13px;color:var(--sub);margin:10px 2px 0;line-height:1.6}
+.dayvisits{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+@media (min-width:720px){ .cday{min-height:84px} .cday .em{display:none} .cday .nm,.cday .more{display:block} }
 .datalinks{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .datalinks a{flex:1 1 140px;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;font-weight:700}
 .datalinks a small{display:block;font-weight:400;color:var(--sub);font-size:11px}
@@ -217,6 +235,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
   <div class="tabs" id="tabs">
     <button data-v="search" class="on">📍 さがす</button>
     <button data-v="visits">📒 行ったリスト</button>
+    <button data-v="cal">📅 カレンダー</button>
     <button data-v="stats">📊 振り返り</button>
     <button data-act="add">＋ 追加</button>
   </div>
@@ -254,7 +273,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     </section>
 
     <div id="right">
-      <div class="seg" id="seg"><button data-v="visits" class="on">📒 行ったリスト</button><button data-v="stats">📊 振り返り</button></div>
+      <div class="seg" id="seg"><button data-v="visits" class="on">📒 行ったリスト</button><button data-v="cal">📅 カレンダー</button><button data-v="stats">📊 振り返り</button></div>
       <section class="view pc-on" id="v-visits">
         <div class="panel">
           <h2>行ったリスト <button class="btn sm pc-add" data-act="add">＋ 追加</button></h2>
@@ -272,6 +291,20 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
           <div class="list" id="list"></div>
         </div>
       </section>
+      <section class="view" id="v-cal">
+        <div class="panel">
+          <div class="calhead">
+            <h2 id="calTitle">—</h2>
+            <div class="calnav"><button class="btn sm plain" id="calPrev" aria-label="前の月">◀</button><button class="btn sm plain" id="calToday">今月</button><button class="btn sm plain" id="calNext" aria-label="次の月">▶</button></div>
+          </div>
+          <div class="calg" id="calGrid"></div>
+          <div class="calsum" id="calSum"></div>
+        </div>
+        <div class="panel">
+          <h2 id="calDayTitle">—</h2>
+          <div class="dayvisits" id="calDay"></div>
+        </div>
+      </section>
       <section class="view" id="v-stats">
         <div id="statsWrap"></div>
       </section>
@@ -284,6 +317,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
   <button data-v="search" class="on"><span class="ic">📍</span>さがす</button>
   <button data-v="visits"><span class="ic">📒</span>行った</button>
   <button data-act="add" class="add"><span class="ic">＋</span>追加</button>
+  <button data-v="cal"><span class="ic">📅</span>カレンダー</button>
   <button data-v="stats"><span class="ic">📊</span>振り返り</button>
 </nav>
 
@@ -1105,7 +1139,82 @@ function renderStats(){
   p3.append(fives.length ? el("div",{class:"rank"}, fives.map(v=>el("div",{class:"r"}, el("b",{},v.name), el("span",{class:"note",style:"margin:0"}, `${v.genre||""}・${fmtDate(v.date)}`)))) : el("div",{class:"note"},"まだありません"));
   w.append(p3);
 }
-function renderAll(){ renderVisits(); renderResults(); renderStats(); }
+/* ---------- render: calendar ---------- */
+const GENRE_EMOJI = {"ラーメン":"🍜","居酒屋・バー":"🍺","カフェ":"☕","焼肉":"🥩","寿司":"🍣","中華":"🥟","そば・うどん":"🥢","カレー":"🍛","定食・和食":"🍱","イタリアン":"🍝","レストラン":"🍽","ファストフード":"🍔"};
+const gEmoji = g => GENRE_EMOJI[g] || "🍴";
+function calEntries(){
+  const by = {};
+  S.visits.forEach(v=>v.log.forEach((x,i)=>{ if(!x.d) return; (by[x.d] ||= []).push({v, x, nth:i+1}); }));
+  return by;
+}
+function renderCal(){
+  if (!S.calMonth) { const t=new Date(); S.calMonth = new Date(t.getFullYear(), t.getMonth(), 1); }
+  if (!S.calSel) S.calSel = today();
+  const y=S.calMonth.getFullYear(), m=S.calMonth.getMonth();
+  $("#calTitle").textContent = `${y}年${m+1}月`;
+  const by = calEntries(); const td = today();
+  const g=$("#calGrid"); g.textContent="";
+  ["日","月","火","水","木","金","土"].forEach((w,i)=>g.append(el("div",{class:"dow"+(i===0?" sun":i===6?" sat":"")},w)));
+  const first=new Date(y,m,1); const start=new Date(first); start.setDate(1-first.getDay());
+  for (let i=0;i<42;i++){
+    const dt=new Date(start); dt.setDate(start.getDate()+i);
+    if (i>=35 && dt.getMonth()!==m) break;
+    const ds=ymd(dt); const es=by[ds]||[]; const inM=dt.getMonth()===m;
+    const cell=el("button",{type:"button",class:"cday"+(inM?"":" out")+(ds===td?" today":"")+(ds===S.calSel?" sel":"")+(es.length?" has":""),
+      "aria-label":`${dt.getMonth()+1}月${dt.getDate()}日 ${es.length?es.map(e=>e.v.name).join("、"):"記録なし"}`,
+      onclick:()=>{ S.calSel=ds; if(!inM) S.calMonth=new Date(dt.getFullYear(), dt.getMonth(), 1); renderCal();
+        if (window.matchMedia("(max-width:1099px)").matches) $("#calDayTitle").scrollIntoView({behavior:"smooth",block:"start"}); }},
+      el("span",{class:"n"}, dt.getDate()));
+    if (es.length) {
+      cell.append(el("span",{class:"em"}, es.slice(0,3).map(e=>gEmoji(e.v.genre)).join("")+(es.length>3?"…":"")));
+      es.slice(0,2).forEach(e=>cell.append(el("span",{class:"nm",title:e.v.name}, gEmoji(e.v.genre)+" "+e.v.name)));
+      if (es.length>2) cell.append(el("span",{class:"more"}, `ほか${es.length-2}件`));
+    }
+    g.append(cell);
+  }
+  // 月のまとめ
+  const ym = `${y}-${String(m+1).padStart(2,"0")}`;
+  const mEntries = Object.entries(by).filter(([d])=>d.startsWith(ym)).flatMap(([,es])=>es);
+  const shops = new Set(mEntries.map(e=>e.v.id));
+  const fresh = mEntries.filter(e=>e.nth===1).length;
+  const rated = mEntries.filter(e=>e.x.r>0);
+  const gc={}; mEntries.forEach(e=>{ const k=e.v.genre||"未分類"; gc[k]=(gc[k]||0)+1; });
+  const topG = Object.entries(gc).sort((a,b)=>b[1]-a[1])[0];
+  $("#calSum").textContent = mEntries.length
+    ? `この月の外食 ${mEntries.length}回・${shops.size}軒（新しい店 ${fresh}軒）・平均★${rated.length?(rated.reduce((s,e)=>s+e.x.r,0)/rated.length).toFixed(1):"–"}${topG&&topG[1]>=2?`・いちばん多いジャンル ${gEmoji(topG[0])}${topG[0]}（${topG[1]}回）`:""}`
+    : "この月の記録はまだありません。";
+  // 選んだ日の詳細
+  const sel = S.calSel; const [sy,sm,sd]=sel.split("-").map(Number); const wd="日月火水木金土"[new Date(sy,sm-1,sd).getDay()];
+  $("#calDayTitle").textContent = `${sm}月${sd}日（${wd}）に行ったお店`;
+  const box=$("#calDay"); box.textContent="";
+  const es = by[sel]||[];
+  if (!es.length) {
+    box.append(el("div",{class:"empty",style:"padding:14px 6px"},"この日の記録はありません。"));
+    box.append(el("button",{class:"btn ghost",onclick:()=>{ openModal("new"); $("#fDate").value = sel; }},"＋ この日に行ったお店を追加"));
+    return;
+  }
+  es.forEach(({v,x,nth})=>{
+    const url = safeUrl(v.url) || mapsSearch(v.name+" "+(v.area||""));
+    const pc = v.photoCount || (S.photoCache[v.id]||[]).length;
+    const card = el("div",{class:"card"},
+      el("div",{class:"top"}, el("div",{class:"name"}, gEmoji(v.genre)+" "+v.name),
+        el("button",{class:"iconbtn",onclick:()=>openModal("edit", v)},"編集")),
+      el("div",{class:"meta"},
+        el("span",{style:"color:var(--star);font-size:15px"}, x.r ? "★".repeat(x.r)+"☆".repeat(5-x.r) : "未評価"),
+        el("span",{style:"font-weight:700;color:var(--ink)"}, nth===1 ? "はじめて" : `${nth}回目`),
+        v.genre && el("span",{},v.genre), v.area && el("span",{},"📍 "+v.area),
+        v.count>1 && el("span",{}, `通算${v.count}回・平均★${v.avg?v.avg.toFixed(1):"–"}`)),
+      x.m && el("div",{class:"memo"}, x.m),
+      el("div",{class:"meta",style:"gap:12px"},
+        el("a",{href:url,target:"_blank",rel:"noopener",style:"font-size:13px;font-weight:700;text-decoration:none"},"🗺 地図"),
+        el("a",{href:routeUrl(v),target:"_blank",rel:"noopener",style:"font-size:13px;font-weight:700;text-decoration:none"},"🚶 経路"),
+        (pc>0 && S.cfg) && el("button",{class:"linkbtn",style:"font-size:13px;text-decoration:none",onclick:()=>{ S.openPhotos["cal_"+v.id]=!S.openPhotos["cal_"+v.id]; renderCal(); }}, `📷 写真${pc}枚`)));
+    if (S.openPhotos["cal_"+v.id] && S.cfg) card.append(photoStrip(v));
+    box.append(card);
+  });
+  box.append(el("button",{class:"btn sm ghost",style:"align-self:flex-start",onclick:()=>{ openModal("new"); $("#fDate").value = sel; }},"＋ この日にお店を追加"));
+}
+function renderAll(){ renderVisits(); renderResults(); renderStats(); if (S.rightView==="cal" || $("#v-cal").classList.contains("on")) renderCal(); }
 
 /* ---------- modal: new / revisit / edit ---------- */
 function fillGenreSelect(){
@@ -1374,13 +1483,15 @@ function readSetupHash(){
 
 /* ---------- nav ---------- */
 function showView(n){
-  if (n==="visits"||n==="stats") S.rightView = n;
+  if (n==="visits"||n==="stats"||n==="cal") S.rightView = n;
   document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on", s.id==="v-"+n));
   $("#v-visits").classList.toggle("pc-on", S.rightView==="visits");
   $("#v-stats").classList.toggle("pc-on", S.rightView==="stats");
+  $("#v-cal").classList.toggle("pc-on", S.rightView==="cal");
   document.querySelectorAll(".tabs [data-v], .bnav [data-v]").forEach(b=>b.classList.toggle("on",b.dataset.v===n));
   document.querySelectorAll("#seg [data-v]").forEach(b=>b.classList.toggle("on",b.dataset.v===S.rightView));
   if (n==="stats") renderStats();
+  if (n==="cal") renderCal();
   if (window.matchMedia("(max-width:1099px)").matches) window.scrollTo({top:0});
 }
 
@@ -1421,6 +1532,9 @@ $("#shareCopy").addEventListener("click", async ()=>{ try{ await navigator.clipb
 $("#pAuto").addEventListener("change", e=>{ S.prefs.autoSearchOn=e.target.checked; savePrefs(); });
 $("#pTime").addEventListener("change", e=>{ S.prefs.timeAdjust=e.target.checked; savePrefs(); renderResults(); });
 $("#plSave").addEventListener("click", savePlace);
+$("#calPrev").addEventListener("click", ()=>{ if(!S.calMonth) renderCal(); S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth()-1, 1); renderCal(); });
+$("#calNext").addEventListener("click", ()=>{ if(!S.calMonth) renderCal(); S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth()+1, 1); renderCal(); });
+$("#calToday").addEventListener("click", ()=>{ const t=new Date(); S.calMonth = new Date(t.getFullYear(), t.getMonth(), 1); S.calSel = today(); renderCal(); });
 $("#plName").addEventListener("keydown", e=>{ if(e.key==="Enter"&&!e.isComposing) savePlace(); });
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && S.cfg) pull(); });
 window.addEventListener("hashchange", ()=>{ if (readSetupHash()) pull(); });
