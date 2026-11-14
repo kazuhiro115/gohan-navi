@@ -35,7 +35,9 @@ a{color:var(--accent-d)}
 header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
 .brand{display:flex;align-items:center;gap:10px;min-width:0}
 .logo{width:40px;height:40px;border-radius:12px;background:var(--accent);display:grid;place-items:center;color:#fff;font-weight:900;font-size:20px;flex:0 0 auto}
-h1{font-size:22px;margin:0;font-weight:900}
+h1{font-size:22px;margin:0;font-weight:900;white-space:nowrap}
+#syncTxt{max-width:44vw;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:420px){.tag{display:none}}
 .tag{font-size:12px;color:var(--sub)}
 .sync{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--sub);flex:0 0 auto}
@@ -389,7 +391,7 @@ const S = {
   cfg:null, visits:[], pending:[], syncState:"local", syncing:false, serverVer:0, placesOn:null,
   settings:{savedPlaces:[]}, prefs:{autoSearch:true, timeAdjust:true},
   genre:"すべて", filterGenre:"すべて", onlyUnrated:false, pos:null, placeLabel:"", shops:null, src:"", searching:false, searchErr:"", timing:"", shown:30,
-  mode:"new", editing:null, fRating:0, fExtra:{}, newPhotos:[], pickShops:null, photoCache:{}, openPhotos:{}, rightView:"visits", sheetUrl:"", photoUrl:""
+  mode:"new", editing:null, fRating:0, fExtra:{}, newPhotos:[], pickShops:null, photoCache:{}, openPhotos:{}, rightView:"visits", sheetUrl:"", photoUrl:"", srcReason:null
 };
 
 /* ---------- helpers ---------- */
@@ -585,7 +587,8 @@ async function api(method, body){
   if (!j.ok) throw {code: j.error==="auth" ? "auth" : "server", msg:j.error, detail:j.detail};
   return j;
 }
-async function pull(){
+function pull(){ S.pullP = pullInner(); return S.pullP; }
+async function pullInner(){
   if (!S.cfg) { setSync("local"); renderBanner(); return; }
   setSync("syncing");
   try {
@@ -689,7 +692,7 @@ function overpassRace(q){
     const start=i=>{
       if (done || i>=OVERPASS.length || i<started) return;
       started++; const c=new AbortController(); ctrls.push(c);
-      const t=setTimeout(()=>c.abort(), 15000);
+      const t=setTimeout(()=>c.abort(), 8000);
       fetch(OVERPASS[i], {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q), signal:c.signal})
         .then(r=>{ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
         .then(j=>{ clearTimeout(t); if(done) return; finish(); resolve({j, ep:new URL(OVERPASS[i]).host}); })
@@ -698,8 +701,10 @@ function overpassRace(q){
           else if (started===failed) start(started); });
     };
     start(0);
-    timers.push(setTimeout(()=>start(1), 2500));
-    timers.push(setTimeout(()=>start(2), 5000));
+    timers.push(setTimeout(()=>start(1), 1500));
+    timers.push(setTimeout(()=>start(2), 3000));
+    // 全体で8秒たっても返らなければ諦める（サーバー停止時に長く待たせない）
+    timers.push(setTimeout(()=>{ if (!done) { finish(); reject(new Error("timeout")); } }, 8000));
   });
 }
 function parseOsm(j){
@@ -734,16 +739,31 @@ async function fetchGoogle(lat,lng,radius){
     hours:(p.hours&&p.hours[di]||"").replace(/^[^:：]+[:：]\s*/,""), kids:p.kids, addr:p.addr, uri:p.uri}));
   return {shops, src:"google", label:"Googleマップ", used:j.used};
 }
+function googleReason(){
+  if (!S.cfg) return {k:"nosync", t:"この端末は同期が未設定のため、Googleマップのデータを使えません。右上の「この端末のみ」から同期を設定するか、ほかの端末の設定画面にある「ほかの端末を設定するリンク」をこの端末で開いてください。"};
+  if (S.syncState==="auth") return {k:"auth", t:"合言葉が違うため、Googleマップのデータを使えません。右上から同期の設定を確認してください。"};
+  if (!S.serverVer) return {k:"offline", t:"スプレッドシートに接続できないため、Googleマップのデータを使えません。電波の良い場所で再度お試しください。"};
+  if (S.serverVer<2) return {k:"oldgs", t:"スプレッドシート側（Code.gs）が旧版のため、Googleマップのデータを使えません。最新版に貼り替えて「新バージョン」でデプロイしてください。"};
+  if (!S.placesOn) return {k:"nokey", t:"Googleマップの鍵が未登録のため、Googleマップのデータを使えません。Apps Scriptのスクリプト プロパティに PLACES_KEY を登録し、関数 testPlaces で確認してください。"};
+  return null;
+}
 async function fetchShops(lat,lng,radius){
-  if (S.cfg && S.serverVer>=2 && S.placesOn) {
+  // 起動直後はスプレッドシートの応答（Google検索が使えるか）を最大6秒待つ
+  if (S.cfg && !S.serverVer && S.pullP) await Promise.race([S.pullP, new Promise(r=>setTimeout(r,6000))]);
+  S.srcReason = googleReason();
+  if (!S.srcReason) {
     try { return await fetchGoogle(lat,lng,radius); }
     catch(e){
-      if (e.msg==="no_places_key") S.placesOn=false;
-      else if (e.msg==="daily_limit") toast("今日のGoogle検索の上限（30回）に達したため、地図データ（OSM）で探します");
-      else toast("Google検索に失敗したため、地図データ（OSM）で探します");
+      if (e.msg==="no_places_key") { S.placesOn=false; S.srcReason = googleReason(); }
+      else if (e.msg==="daily_limit") S.srcReason = {k:"limit", t:"今日のGoogle検索の上限（30回）に達したため、地図データ（OpenStreetMap）で探しています。明日になると戻ります。"};
+      else S.srcReason = {k:"gerr", t:"Googleマップのデータを取得できなかったため、地図データ（OpenStreetMap）で探しています。"+(e.detail?`（詳細：${String(e.detail).slice(0,80)}）`:"")};
     }
   }
   return await fetchOsm(lat,lng,radius);
+}
+function mapsAppUrl(){
+  const g = S.genre==="すべて" ? "飲食店" : S.genre.replace("・バー","").replace("定食・和食","定食");
+  return S.pos ? `https://www.google.com/maps/search/${encodeURIComponent(g)}/@${S.pos.lat.toFixed(5)},${S.pos.lng.toFixed(5)},16z` : mapsSearch(g);
 }
 async function searchAt(pos, label, geoMs){
   S.pos = pos; S.searching = true; S.searchErr = ""; S.shops = null; S.shown = 30; S.timing = "";
@@ -757,7 +777,7 @@ async function searchAt(pos, label, geoMs){
     S.shops = r.shops.map(s=>({...s, dist:distM(pos.lat,pos.lng,s.lat,s.lng)}));
     S.src = r.src;
     S.timing = (geoMs!=null ? `位置 ${(geoMs/1000).toFixed(1)}秒・` : "") + `検索 ${((performance.now()-t0)/1000).toFixed(1)}秒（${r.label}）`;
-  } catch(e){ S.searchErr = "お店のデータを取得できませんでした。地図データのサーバーが混み合っている可能性があります。少し時間をおいて「再検索」してください。"; }
+  } catch(e){ S.searchErr = "地図データ（OpenStreetMap）のサーバーが応答しませんでした。混雑や停止中のことがあります。"; }
   S.searching = false;
   renderWhere(); renderResults(); renderAttr(); renderVisits();
 }
@@ -864,7 +884,16 @@ function shopCard(s, opts={}){
 function renderResults(){
   const w=$("#resultsWrap"); w.textContent="";
   if (S.searching) { w.append(el("div",{class:"loading"},el("div",{class:"spin"}),"近くのお店を探しています…（通常2〜5秒）")); return; }
-  if (S.searchErr) { w.append(el("div",{class:"note box",style:"margin-top:14px"},S.searchErr)); return; }
+  if (S.searchErr) {
+    const box = el("div",{class:"note box",style:"margin-top:14px;display:flex;flex-direction:column;gap:10px"},
+      el("div",{}, S.searchErr),
+      S.srcReason && el("div",{style:"font-weight:700"}, "💡 "+S.srcReason.t),
+      S.pos && el("div",{class:"acts"},
+        el("a",{class:"btn sm",href:mapsAppUrl(),target:"_blank",rel:"noopener"},"🗺 Googleマップで近くの店を見る"),
+        el("button",{class:"btn sm plain",onclick:()=>searchAt(S.pos, S.placeLabel)},"↻ 再検索")),
+      S.srcReason && S.srcReason.k==="nosync" && el("button",{class:"btn sm ghost",style:"width:100%",onclick:openSettings},"⚙ 同期を設定する"));
+    w.append(box); return;
+  }
   if (!S.shops) { w.append(el("div",{class:"note",style:"margin:14px 4px"},"「現在地の近くを探す」を押すと、近くのお店を表示します。記録が増えるほど、★の高いジャンルが上に来るようになります。")); return; }
   let all = scored();
   $("#kidsWrap").style.display = all.some(s=>s.kids!=null) ? "" : "none";
@@ -876,6 +905,8 @@ function renderResults(){
   const order = $("#order").value;
   rows.sort(order==="dist" ? (a,b)=>a.dist-b.dist : order==="google" ? (a,b)=>((b.rating||0)-(a.rating||0))||(a.dist-b.dist) : (a,b)=>b.sc-a.sc);
 
+  if (S.src!=="google" && S.srcReason) w.append(el("div",{class:"banner",style:"margin-top:14px"}, "💡 "+S.srcReason.t+"（今はOpenStreetMapのデータで表示中）",
+    S.srcReason.k==="nosync" && el("div",{style:"margin-top:6px"}, el("button",{class:"btn sm ghost",onclick:openSettings},"⚙ 同期を設定する"))));
   w.append(el("div",{class:"sect"}, el("span",{}, `${rows.length}件見つかりました`),
     el("button",{class:"btn sm ghost",onclick:()=>S.pos && searchAt(S.pos, S.placeLabel)},"↻ 再検索")));
   if (!rows.length) { w.append(el("div",{class:"empty"},"条件に合うお店が見つかりませんでした。範囲を広げるか、絞り込みを外してください。")); return; }
@@ -1113,7 +1144,7 @@ async function pickNear(){
     if (!shops.length) $("#pickList").append(el("div",{class:"note"},"近くにお店が見つかりませんでした。下に店名を入力してください。"));
     if (!S.placeLabel) reverseLabel(pos.lat,pos.lng).then(l=>{ (S.pickShops||[]).forEach(s=>{ if(!s.addr) s.area=l; }); if (!$("#fArea").value) $("#fArea").value=l; });
   } catch(e){
-    $("#pickList").textContent=""; $("#pickList").append(el("div",{class:"err"}, e.code==="denied" ? "位置情報が許可されていません。店名を手入力してください。" : "近くのお店を取得できませんでした。店名を手入力してください。"));
+    $("#pickList").textContent=""; $("#pickList").append(el("div",{class:"err"}, e.code==="denied" ? "位置情報が許可されていません。店名を手入力してください。" : "近くのお店を取得できませんでした。店名を手入力するか、Google Mapsの共有テキストを貼り付けてください。"));
   } finally { b.disabled=false; b.textContent="📍 今いる場所の近くから選ぶ"; }
 }
 function renderPick(){
@@ -1296,7 +1327,7 @@ const pulled = pull();
   try {
     if (!navigator.permissions) return;
     const st = await navigator.permissions.query({name:"geolocation"});
-    if (st.state==="granted") { await Promise.race([pulled, new Promise(r=>setTimeout(r,2500))]); locate(); }
+    if (st.state==="granted") { await Promise.race([pulled, new Promise(r=>setTimeout(r,2500))]); if (!S.pos && !S.searching && !$("#locate").disabled) locate(); }
   } catch(e){}
 })();
 // O: オフラインでも開けるように
