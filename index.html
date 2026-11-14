@@ -343,6 +343,9 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <div id="dataLinks2"></div>
     <h4>同期（スプレッドシート）</h4>
     <div class="note" style="margin-top:0">Googleスプレッドシートに記録を保存し、スマホ・タブレット・PCで共有します。</div>
+    <label class="label" for="sLink">設定入りリンクを貼り付け（いちばん簡単）</label>
+    <div class="row"><input class="input" id="sLink" placeholder="https://kazuhiro115.github.io/gohan-navi/#setup=…" autocomplete="off" style="flex:3"><button class="btn sm" id="sLinkGo" style="flex:1">反映</button></div>
+    <div class="note" style="margin-top:6px">または、URLと合言葉を入力：</div>
     <label class="label" for="sUrl">ウェブアプリのURL</label>
     <input class="input" id="sUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" inputmode="url">
     <label class="label" for="sTok">合言葉</label>
@@ -350,8 +353,8 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <div id="sMsg"></div>
     <div class="foot"><button class="btn plain" id="sOff">同期をやめる</button><button class="btn" id="sSave">接続して保存</button></div>
     <div id="shareBox" style="display:none">
-      <label class="label">ほかの端末を設定するリンク</label>
-      <div class="note" style="margin-top:0">自分のタブレット・PCで開くだけで設定が完了します。合言葉が入っているので他人に送らないでください。</div>
+      <label class="label">設定入りリンク（ほかの端末・ブックマーク用）</label>
+      <div class="note" style="margin-top:0">自分のタブレット・PCで開くだけで同期の設定が完了します。<b>このリンクをブックマーク（ホーム画面に追加）しておくと、ブラウザのデータが消えても開くたびに自動で同期が戻ります。</b>合言葉が入っているので他人には送らないでください。</div>
       <div class="row" style="margin-top:8px"><input class="input" id="shareUrl" readonly style="font-size:12px;flex:3"><button class="btn sm" id="shareCopy" style="flex:1">コピー</button></div>
     </div>
     <div class="foot"><button class="btn ghost" id="syncNow">↻ 今すぐ同期</button></div>
@@ -551,6 +554,29 @@ function cleanVisit(v){
   return {id:v.id, name:v.name, genre:v.genre||"", area:v.area||"", date:last.d||"", rating:Number(last.r)||0, memo:last.m||"",
     url:v.url||"", lat:v.lat??"", lng:v.lng??"", osmId:v.osmId||"", placeId:v.placeId||"", log,
     createdAt:v.createdAt||Date.now(), updatedAt:Date.now()};
+}
+
+/* ---------- sync config (localStorage + cookie で二重に保存) ---------- */
+const CK = "gncfg";
+function b64e(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
+function b64d(s){ s=s.replace(/-/g,"+").replace(/_/g,"/"); return decodeURIComponent(escape(atob(s + "===".slice((s.length+3)%4)))); }
+function cookiePath(){ return location.pathname.replace(/[^/]*$/,"") || "/"; }
+function saveCfg(cfg){
+  ls.set(K.cfg, cfg);
+  try { document.cookie = `${CK}=${b64e(JSON.stringify({u:cfg.url,t:cfg.token}))}; max-age=34560000; path=${cookiePath()}; SameSite=Lax${location.protocol==="https:"?"; Secure":""}`; } catch(e){}
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch(e){}
+}
+function loadCfg(){
+  const c = ls.get(K.cfg, null);
+  let fromCookie = null;
+  try { const m = document.cookie.match(new RegExp("(?:^|; )"+CK+"=([^;]+)")); if (m) { const j = JSON.parse(b64d(m[1])); if (j.u && j.t) fromCookie = {url:j.u, token:j.t}; } } catch(e){}
+  if (c && c.url && c.token) { if (!fromCookie) saveCfg(c); return c; }   // 古い端末にもcookieを補う
+  if (fromCookie) { saveCfg(fromCookie); return fromCookie; }              // localStorageが消えても復元
+  return null;
+}
+function clearCfg(){
+  ls.del(K.cfg);
+  try { document.cookie = `${CK}=; max-age=0; path=${cookiePath()}`; } catch(e){}
 }
 
 /* ---------- sync ---------- */
@@ -1244,7 +1270,7 @@ async function connect(){
     const server = new Set((j.visits||[]).map(v=>v.id));
     const localOnly = S.visits.filter(v=>!server.has(v.id));
     S.pending = [...localOnly.map(v=>({action:"upsert",visit:cleanVisit(v)})), ...S.pending.filter(o=>!localOnly.some(v=>o.visit?.id===v.id))];
-    ls.set(K.cfg, S.cfg); saveLocal();
+    saveCfg(S.cfg); saveLocal();
     await pull();
     m.append(el("div",{class:"ok"}, `✓ 接続できました（記録 ${S.visits.length}件）`));
     show("#shareBox", true); $("#shareUrl").value=shareLink();
@@ -1257,7 +1283,7 @@ function readSetupHash(){
   try {
     const s = m[1].replace(/-/g,"+").replace(/_/g,"/");
     const j = JSON.parse(decodeURIComponent(escape(atob(s + "===".slice((s.length+3)%4)))));
-    if (j.u && j.t) { S.cfg={url:j.u, token:j.t}; ls.set(K.cfg,S.cfg); toast("同期の設定が完了しました"); }
+    if (j.u && j.t) { const same = S.cfg && S.cfg.url===j.u && S.cfg.token===j.t; S.cfg={url:j.u, token:j.t}; saveCfg(S.cfg); if (!same) toast("同期の設定が完了しました"); }
   } catch(e){ toast("設定リンクを読み取れませんでした"); }
   history.replaceState(null,"",location.pathname+location.search);
   return true;
@@ -1299,7 +1325,13 @@ $("#save").addEventListener("click", save);
 $("#cOk").addEventListener("click", ()=>{ if(confirmAct) confirmAct(); confirmAct=null; closeModals(); });
 $("#syncBtn").addEventListener("click", openSettings);
 $("#sSave").addEventListener("click", connect);
-$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.serverVer=0; S.placesOn=null; S.sheetUrl=""; S.photoUrl=""; ls.del(K.cfg); ls.del("gn-links"); renderDataLinks(); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
+$("#sLinkGo").addEventListener("click", ()=>{
+  const m = $("#sLink").value.trim().match(/#setup=([A-Za-z0-9_-]+)/);
+  if (!m) { toast("設定入りリンクではないようです"); return; }
+  try { const j = JSON.parse(b64d(m[1])); if (!j.u || !j.t) throw 0; $("#sUrl").value = j.u; $("#sTok").value = j.t; $("#sLink").value = ""; connect(); }
+  catch(e){ toast("リンクを読み取れませんでした"); }
+});
+$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.serverVer=0; S.placesOn=null; S.sheetUrl=""; S.photoUrl=""; clearCfg(); ls.del("gn-links"); renderDataLinks(); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
 $("#syncNow").addEventListener("click", async ()=>{ await pull(); toast(S.syncState==="ok"?"同期しました":"同期できませんでした"); });
 $("#shareCopy").addEventListener("click", async ()=>{ try{ await navigator.clipboard.writeText($("#shareUrl").value); toast("コピーしました"); }catch(e){ $("#shareUrl").select(); toast("選択してコピーしてください"); } });
 $("#pAuto").addEventListener("change", e=>{ S.prefs.autoSearch=e.target.checked; savePrefs(); });
@@ -1311,7 +1343,7 @@ window.addEventListener("hashchange", ()=>{ if (readSetupHash()) pull(); });
 window.addEventListener("online", ()=>{ if(S.cfg) flush(false); });
 
 /* ---------- init ---------- */
-S.cfg = ls.get(K.cfg, null);
+S.cfg = loadCfg();
 S.visits = ls.get(K.cache, []).filter(v=>v&&v.id&&v.name).map(normalizeVisit);
 S.pending = ls.get(K.pend, []);
 S.prefs = {...S.prefs, ...ls.get(K.prefs, {})};
