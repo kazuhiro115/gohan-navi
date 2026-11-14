@@ -344,7 +344,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <h3>設定<button class="x" data-close>×</button></h3>
     <h4>この端末での動作</h4>
     <div class="checks" style="flex-direction:column;margin-top:4px">
-      <label><input type="checkbox" id="pAuto"> 開いたら自動で現在地の近くを探す</label>
+      <label><input type="checkbox" id="pAuto"> 開いたら自動で現在地の近くを探す（初期設定：オフ）</label>
       <label><input type="checkbox" id="pTime"> 時間帯に合わせておすすめを調整（朝はカフェ、夜は居酒屋など）</label>
     </div>
     <h4>保存した場所</h4>
@@ -404,7 +404,7 @@ const DAY = 86400000;
 
 const S = {
   cfg:null, visits:[], pending:[], syncState:"local", syncing:false, serverVer:0, placesOn:null,
-  settings:{savedPlaces:[]}, prefs:{autoSearch:true, timeAdjust:true},
+  settings:{savedPlaces:[]}, prefs:{autoSearchOn:false, timeAdjust:true},
   genre:"すべて", filterGenre:"すべて", onlyUnrated:false, pos:null, placeLabel:"", shops:null, src:"", searching:false, searchErr:"", timing:"", shown:30,
   mode:"new", editing:null, fRating:0, fExtra:{}, newPhotos:[], pickShops:null, photoCache:{}, openPhotos:{}, rightView:"visits", sheetUrl:"", photoUrl:"", srcReason:null
 };
@@ -1332,7 +1332,7 @@ function shareLink(){
 }
 function openSettings(){
   $("#sUrl").value = S.cfg?.url||""; $("#sTok").value = S.cfg?.token||""; $("#sMsg").textContent="";
-  $("#pAuto").checked = !!S.prefs.autoSearch; $("#pTime").checked = !!S.prefs.timeAdjust;
+  $("#pAuto").checked = !!S.prefs.autoSearchOn; $("#pTime").checked = !!S.prefs.timeAdjust;
   show("#shareBox", !!S.cfg); if (S.cfg) $("#shareUrl").value = shareLink();
   const si=$("#srcInfo"); si.textContent="";
   si.append(!S.cfg ? "同期を設定すると、Googleマップのデータも使えるようになります（鍵の登録が必要）。現在はOpenStreetMapを使用中です。"
@@ -1418,7 +1418,7 @@ $("#sLinkGo").addEventListener("click", ()=>{
 $("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.serverVer=0; S.placesOn=null; S.sheetUrl=""; S.photoUrl=""; clearCfg(); ls.del("gn-links"); renderDataLinks(); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
 $("#syncNow").addEventListener("click", async ()=>{ await pull(); toast(S.syncState==="ok"?"同期しました":"同期できませんでした"); });
 $("#shareCopy").addEventListener("click", async ()=>{ try{ await navigator.clipboard.writeText($("#shareUrl").value); toast("コピーしました"); }catch(e){ $("#shareUrl").select(); toast("選択してコピーしてください"); } });
-$("#pAuto").addEventListener("change", e=>{ S.prefs.autoSearch=e.target.checked; savePrefs(); });
+$("#pAuto").addEventListener("change", e=>{ S.prefs.autoSearchOn=e.target.checked; savePrefs(); });
 $("#pTime").addEventListener("change", e=>{ S.prefs.timeAdjust=e.target.checked; savePrefs(); renderResults(); });
 $("#plSave").addEventListener("click", savePlace);
 $("#plName").addEventListener("keydown", e=>{ if(e.key==="Enter"&&!e.isComposing) savePlace(); });
@@ -1440,7 +1440,7 @@ setSync(S.cfg ? "syncing" : "local");
 const pulled = pull();
 // N: 開いたら自動で現在地検索（位置情報がすでに許可されているときだけ）
 (async ()=>{
-  if (!S.prefs.autoSearch) return;
+  if (!S.prefs.autoSearchOn) return;   // 初期設定はオフ（ボタンを押すまで検索しない）
   try {
     if (!navigator.permissions) return;
     const st = await navigator.permissions.query({name:"geolocation"});
