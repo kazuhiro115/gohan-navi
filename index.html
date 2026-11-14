@@ -230,6 +230,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
         <div class="checks">
           <label><input type="checkbox" id="onlyNew"> まだ行っていない店だけ</label>
           <label><input type="checkbox" id="hideClosed"> 閉まっている店を隠す</label>
+          <label><input type="checkbox" id="noChain"> 大手チェーンを除く</label>
           <label id="kidsWrap" style="display:none"><input type="checkbox" id="kidsOnly"> 子連れOKの店</label>
         </div>
         <details class="alt" id="altBox">
@@ -479,6 +480,23 @@ function detectGenreG(p){
   if ((p.types||[]).includes("bar")) return "居酒屋・バー";
   return "レストラン";
 }
+
+/* ---------- chain detection ---------- */
+// 主要チェーン（店名に含まれる語）。Googleのデータにはブランド情報がないため名前で判定する
+const CHAIN_RE = new RegExp([
+  "マクドナルド","モスバーガー","ケンタッキー","バーガーキング","ロッテリア","フレッシュネス","サブウェイ","ウェンディーズ","ファーストキッチン",
+  "すき家","吉野家","松屋","なか卯","伝説のすた丼","東京チカラめし","松のや","かつや","てんや","大戸屋","やよい軒","ほっともっと","オリジン弁当","キッチンオリジン",
+  "牛角","焼肉ライク","安楽亭","叙々苑","焼肉きんぐ","ワンカルビ","炭火焼肉酒家 牛角","じゅうじゅうカルビ","ペッパーランチ","いきなり[!！]?ステーキ","ステーキガスト","ブロンコビリー","ビッグボーイ",
+  "スシロー","くら寿司","無添くら寿司","はま寿司","かっぱ寿司","魚べい","元気寿司","すし銚子丸","がってん寿司",
+  "サイゼリヤ","ガスト(?!ロ)","バーミヤン","ジョナサン","デニーズ","ロイヤルホスト","ココス","ジョリーパスタ","夢庵","しゃぶ葉","びっくりドンキー","藍屋","とんでん","華屋与兵衛","むさしの森珈琲","グラッチェガーデンズ","ステーキ宮","ビッグボーイ",
+  "丸亀製麺","はなまるうどん","富士そば","小諸そば","ゆで太郎","箱根そば",
+  "日高屋","幸楽苑","餃子の王将","大阪王将","一蘭","一風堂","天下一品","来来亭","丸源ラーメン","魁力屋","リンガーハット","スガキヤ","神座","花月嵐","蒙古タンメン中本","揚州商人","ぎょうざの満洲","バーミヤン",
+  "CoCo壱番屋","ココイチ","ゴーゴーカレー","カレーハウスCoCo",
+  "鳥貴族","磯丸水産","和民","ミライザカ","魚民","白木屋","笑笑","塚田農場","串カツ田中","鳥メロ","山内農場","はなの舞","庄や","つぼ八","テング酒場","土間土間","目利きの銀次","千年の宴","くいもの屋わん","八剣伝","とりいちず","やきとりセンター","焼肉の和民",
+  "スターバックス","ドトール","タリーズ","コメダ","ベローチェ","エクセルシオール","サンマルク","上島珈琲","プロント","PRONTO","ルノアール","星乃珈琲","ミスタードーナツ","クリスピー・クリーム","ゴンチャ","シャノアール","珈琲館","カフェ・ド・クリエ","ベックスコーヒー","椿屋珈琲","カフェ・ベローチェ","ブルーボトル",
+  "ピザハット","ドミノ・ピザ","ピザーラ","ナポリの窯","銀だこ","ペッパーランチ","大阪王将","牛たん ねぎし","築地銀だこ","ケンタッキーフライドチキン"
+].join("|"));
+function isChain(s){ return !!(s.brand || CHAIN_RE.test(s.name||"")); }
 
 /* ---------- opening hours ---------- */
 const DN = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -743,7 +761,7 @@ function parseOsm(j){
     if (la==null||ln==null) return null;
     const name = t["name:ja"]||t.name;
     const addr = [t["addr:city"], t["addr:quarter"]||t["addr:suburb"], t["addr:neighbourhood"]].filter(Boolean).join("");
-    return {src:"osm", osmId:e.type[0]+e.id, name, genre:detectGenre(t,name), lat:la, lng:ln, hours:t.opening_hours||"", addr};
+    return {src:"osm", osmId:e.type[0]+e.id, name, genre:detectGenre(t,name), lat:la, lng:ln, hours:t.opening_hours||"", addr, brand:t.brand||t["brand:wikidata"]||""};
   }).filter(s=>{ if(!s||!s.name) return false; const k=norm(s.name)+Math.round(s.lat*2000)+Math.round(s.lng*2000); if(seen.has(k)) return false; seen.add(k); return true; });
 }
 async function fetchOsm(lat,lng,radius){
@@ -754,7 +772,7 @@ async function fetchOsm(lat,lng,radius){
   else {
     const q = `[out:json][timeout:12];nwr(around:${radius},${lat},${lng})["amenity"~"^(restaurant|fast_food|cafe|pub|bar|food_court|biergarten)$"]["name"];out center qt 300;`;
     const r = await overpassRace(q); raw = r.j; src = r.ep;
-    const slim = {elements:(raw.elements||[]).map(e=>({type:e.type,id:e.id,lat:e.lat,lon:e.lon,center:e.center,tags:e.tags}))};
+    const slim = {elements:(raw.elements||[]).map(e=>({type:e.type,id:e.id,lat:e.lat,lon:e.lon,center:e.center,tags:e.tags}))};  // brandタグも保持
     const next = {}; for (const [k,v] of Object.entries(cache)) if (Date.now()-v.t < 15*60000) next[k]=v;
     next[key] = {t:Date.now(), j:slim}; ls.set(K.shop, next);
   }
@@ -870,7 +888,7 @@ function scored(){
     if (s.rating && s.n>=5) { sc += (s.rating-3.6)*0.9*Math.min(1,s.n/50); if (s.rating>=4 && s.n>=20) why.push({t:`Google★${s.rating.toFixed(1)}`}); }
     if (st) { if (st.k==="closed") sc -= 2.5; else if (st.k==="closing") sc -= 0.4; else sc += 0.2; }
     const tb = timeBoost(s.genre); if (tb) { sc += tb.w; why.push({t:`${tb.lbl}に合う`}); }
-    return {...s, v, sc, why, st};
+    return {...s, v, sc, why, st, chain:isChain(s)};
   });
 }
 function heroReason(s){
@@ -901,7 +919,7 @@ function shopCard(s, opts={}){
     opts.hero && el("div",{class:"lbl"},"✨ 今日の1軒"),
     el("div",{class:"top"}, el("div",{class:"name"}, s.name), el("div",{class:"dist"}, `${fmtDist(s.dist)}・徒歩${walkMin(s.dist)}分`)),
     el("div",{class:"meta"}, s.st && el("span",{class:"st "+s.st.k}, s.st.t), el("span",{},"🍽 "+s.genre), g, s.price && el("span",{},s.price),
-      s.kids===true && el("span",{},"👶 子連れOK"),
+      s.kids===true && el("span",{},"👶 子連れOK"), s.chain && el("span",{style:"border:1px solid var(--line);border-radius:999px;padding:0 6px"},"チェーン"),
       s.v && el("span",{style:"color:var(--accent-d);font-weight:700"}, `${s.v.count}回・${s.v.avg?("平均★"+s.v.avg.toFixed(1)):"未評価"}`)),
     opts.hero ? el("div",{class:"reason"}, heroReason(s)) : el("div",{class:"why"}, s.why.map(x=>el("span",{class:x.neg?"neg":""},x.t))),
     s.hours && el("div",{class:"hours"},"🕒 "+s.hours),
@@ -932,13 +950,15 @@ function renderResults(){
   if (S.genre!=="すべて") rows = rows.filter(r=>r.genre===S.genre);
   if ($("#onlyNew").checked) rows = rows.filter(r=>!r.v);
   if ($("#hideClosed").checked) rows = rows.filter(r=>!r.st || r.st.k!=="closed");
+  const chainN = rows.filter(r=>r.chain).length;
+  if ($("#noChain").checked) rows = rows.filter(r=>!r.chain);
   if ($("#kidsOnly").checked && $("#kidsWrap").style.display==="") rows = rows.filter(r=>r.kids===true);
   const order = $("#order").value;
   rows.sort(order==="dist" ? (a,b)=>a.dist-b.dist : order==="google" ? (a,b)=>((b.rating||0)-(a.rating||0))||(a.dist-b.dist) : (a,b)=>b.sc-a.sc);
 
   if (S.src!=="google" && S.srcReason) w.append(el("div",{class:"banner",style:"margin-top:14px"}, "💡 "+S.srcReason.t+"（今はOpenStreetMapのデータで表示中）",
     S.srcReason.k==="nosync" && el("div",{style:"margin-top:6px"}, el("button",{class:"btn sm ghost",onclick:openSettings},"⚙ 同期を設定する"))));
-  w.append(el("div",{class:"sect"}, el("span",{}, `${rows.length}件見つかりました`),
+  w.append(el("div",{class:"sect"}, el("span",{}, `${rows.length}件見つかりました`, ($("#noChain").checked && chainN) ? el("span",{style:"font-weight:400;font-size:12px;color:var(--sub);margin-left:6px"},`（チェーン${chainN}件を除外）`) : ""),
     el("button",{class:"btn sm ghost",onclick:()=>S.pos && searchAt(S.pos, S.placeLabel)},"↻ 再検索")));
   if (!rows.length) { w.append(el("div",{class:"empty"},"条件に合うお店が見つかりませんでした。範囲を広げるか、絞り込みを外してください。")); return; }
 
@@ -1320,6 +1340,7 @@ $("#placeGo").addEventListener("click", placeSearch);
 $("#placeQ").addEventListener("keydown", e=>{ if(e.key==="Enter"&&!e.isComposing) placeSearch(); });
 $("#radius").addEventListener("change", ()=>{ if(S.pos) searchAt(S.pos, S.placeLabel); });
 ["#order","#onlyNew","#hideClosed","#kidsOnly"].forEach(id=>$(id).addEventListener("change", renderResults));
+$("#noChain").addEventListener("change", e=>{ S.prefs.noChain = e.target.checked; savePrefs(); renderResults(); });
 $("#q").addEventListener("input", renderVisits);
 $("#sort").addEventListener("change", renderVisits);
 $("#pickNear").addEventListener("click", pickNear);
@@ -1355,6 +1376,7 @@ S.prefs = {...S.prefs, ...ls.get(K.prefs, {})};
 S.settings = {savedPlaces:[], ...ls.get(K.settings, {})};
 { const l = ls.get("gn-links", {}); S.sheetUrl = l.s||""; S.photoUrl = l.p||""; }
 readSetupHash();
+$("#noChain").checked = !!S.prefs.noChain;
 fillGenreSelect(); renderGenres(); renderSaved(); renderAll(); renderAttr(); renderDataLinks();
 setSync(S.cfg ? "syncing" : "local");
 const pulled = pull();
