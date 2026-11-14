@@ -140,6 +140,14 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 .hist{display:flex;flex-direction:column;gap:6px;margin-top:6px}
 .hist .h{display:flex;gap:8px;align-items:center;font-size:13px;background:var(--bg);border-radius:10px;padding:7px 10px}
 .hist .h .m{flex:1;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.here{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.here .cand{display:flex;align-items:center;gap:10px;text-align:left;border:1.5px solid var(--line);background:var(--bg);border-radius:14px;padding:12px 14px;width:100%}
+.here .cand b{display:block;font-size:16px;line-height:1.35;word-break:break-word}
+.here .cand small{color:var(--sub);font-size:12px}
+.here .cand .d{margin-left:auto;font-weight:900;color:var(--accent-d);white-space:nowrap;font-size:14px}
+.here .cand.on{border-color:var(--accent);background:var(--accent-l)}
+.here .row{gap:8px}
+.here .info{font-size:12px;color:var(--sub)}
 .pick{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;margin-top:8px}
 .pick button{text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center}
 .pick button small{color:var(--sub);white-space:nowrap}
@@ -217,6 +225,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <section class="view on" id="v-search">
       <div class="panel">
         <button class="btn big" id="locate">📍 現在地の近くを探す</button>
+        <button class="btn ghost" id="hereQuick" style="margin-top:8px">🍽 今いるお店を記録する</button>
         <div class="chips" id="savedChips" style="margin-top:10px"></div>
         <div class="where" id="where"></div>
         <div class="row">
@@ -284,9 +293,8 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <h3><span id="mTitle">行った店を追加</span><button class="x" data-close>×</button></h3>
     <div id="mShopName" style="font-weight:900;font-size:16px;display:none"></div>
     <div id="pickBox">
-      <button class="btn ghost" id="pickNear" style="margin-top:8px">📍 今いる場所の近くから選ぶ</button>
-      <input class="input" id="pickQ" placeholder="店名で絞り込み" style="display:none;margin-top:8px" autocomplete="off">
-      <div class="pick" id="pickList"></div>
+      <button class="btn" id="pickNear" style="margin-top:8px">🍽 今いるお店を探す</button>
+      <div class="here" id="pickList"></div>
       <details class="alt">
         <summary>Google Mapsの共有テキストを貼り付ける</summary>
         <textarea class="input" id="paste" placeholder="Google Mapsで店を開いて「共有」→「コピー」した文字を貼り付け" style="min-height:64px;margin-top:8px"></textarea>
@@ -1124,7 +1132,7 @@ function openModal(mode, v={}){
   show("#historyBox", mode==="edit");
   show("#photoBox", !!S.cfg && S.serverVer>=2);
   $("#visitHead").textContent = mode==="edit" ? "最新の訪問" : (mode==="revisit" ? `今回の訪問（${(v.count||1)+1}回目）` : "今回の訪問");
-  $("#pickList").textContent=""; show("#pickQ", false); $("#pickQ").value=""; $("#paste").value=""; $("#parsed").textContent="";
+  $("#pickList").textContent=""; $("#paste").value=""; $("#parsed").textContent="";
   setShopForm(v);
   if (mode==="edit") {
     const last = v.log[v.log.length-1] || {d:v.date, r:v.rating, m:v.memo};
@@ -1179,35 +1187,85 @@ async function uploadPhotos(shopId, name, date, photos){
   renderVisits();
   toast(ok===photos.length ? "写真を保存しました" : `写真の保存に一部失敗しました（${ok}/${photos.length}枚）`);
 }
+// 「今いるお店」：近い順に3件ずつ。なくなったら範囲を広げて探し直す
+const HERE_RADII = [100, 250, 500], HERE_PAGE = 3;
+const H = {pos:null, ri:0, list:[], shown:new Set(), page:0, busy:false, done:false};
 async function pickNear(){
-  const b=$("#pickNear"); b.disabled=true; b.textContent="📍 位置を確認中…";
+  if (H.busy) return;
+  H.busy = true; H.pos=null; H.ri=0; H.list=[]; H.shown=new Set(); H.page=0; H.done=false;
+  const box=$("#pickList"); box.textContent=""; box.append(el("div",{class:"loading"},el("div",{class:"spin"}),"いる場所を確認中…（お店の中では10秒ほどかかることがあります）"));
   try {
-    let pos;
-    try { pos = await getPosition(); } catch(e){ if(!S.pos) throw e; pos = S.pos; }
-    b.textContent="🔍 近くのお店を検索中…";
-    let shops;
-    if (S.shops && S.pos && distM(S.pos.lat,S.pos.lng,pos.lat,pos.lng) < 150) shops = S.shops.map(s=>({...s}));
-    else shops = (await fetchShops(pos.lat,pos.lng,600)).shops;
-    shops.forEach(s=>{ s.dist = distM(pos.lat,pos.lng,s.lat,s.lng); s.area = s.addr || S.placeLabel || ""; });
-    shops.sort((a,b)=>a.dist-b.dist);
-    S.pickShops = shops;
-    show("#pickQ", true); renderPick();
-    if (!shops.length) $("#pickList").append(el("div",{class:"note"},"近くにお店が見つかりませんでした。下に店名を入力してください。"));
-    if (!S.placeLabel) reverseLabel(pos.lat,pos.lng).then(l=>{ (S.pickShops||[]).forEach(s=>{ if(!s.addr) s.area=l; }); if (!$("#fArea").value) $("#fArea").value=l; });
+    try { H.pos = await geoOnce({enableHighAccuracy:true, timeout:10000, maximumAge:30000}); }
+    catch(e){ if (e.code==="denied"||e.code==="nogeo") throw e; H.pos = await geoOnce({enableHighAccuracy:false, timeout:8000, maximumAge:120000}); }
+    await hereFetch();
   } catch(e){
-    $("#pickList").textContent=""; $("#pickList").append(el("div",{class:"err"}, e.code==="denied" ? "位置情報が許可されていません。店名を手入力してください。" : "近くのお店を取得できませんでした。店名を手入力するか、Google Mapsの共有テキストを貼り付けてください。"));
-  } finally { b.disabled=false; b.textContent="📍 今いる場所の近くから選ぶ"; }
+    box.textContent="";
+    box.append(el("div",{class:"err"}, e.code==="denied" ? "位置情報が許可されていません。下に店名を手入力してください。" : "いる場所を取得できませんでした。下に店名を手入力してください。"));
+    $("#fName").focus();
+  } finally { H.busy=false; }
+}
+async function hereFetch(){
+  const box=$("#pickList"); box.textContent="";
+  box.append(el("div",{class:"loading"},el("div",{class:"spin"}),`近くのお店を探しています…（半径${HERE_RADII[H.ri]}m）`));
+  const r = HERE_RADII[H.ri];
+  let shops;
+  // 直前の検索結果がほぼ同じ場所で、範囲が足りていればそれを使う
+  if (S.shops && S.pos && distM(S.pos.lat,S.pos.lng,H.pos.lat,H.pos.lng) < 30 && Number($("#radius").value) >= r) shops = S.shops.map(s=>({...s}));
+  else { try { shops = (await fetchShops(H.pos.lat,H.pos.lng,r)).shops; } catch(e){ shops = null; } }
+  if (!shops) { box.textContent=""; box.append(el("div",{class:"err"},"お店のデータを取得できませんでした。下に店名を手入力するか、「次へ」でもう一度試してください。"), hereButtons(true)); return; }
+  shops.forEach(s=>{ s.dist = distM(H.pos.lat,H.pos.lng,s.lat,s.lng); s.area = s.addr || S.placeLabel || ""; });
+  const key = s => s.pid || s.osmId || (norm(s.name)+Math.round(s.lat*5000));
+  const fresh = shops.filter(s=>s.dist <= r*1.2 && !H.shown.has(key(s))).sort((a,b)=>a.dist-b.dist);
+  // 既に一覧にあるものと重複しないよう追加
+  const have = new Set(H.list.map(key));
+  fresh.forEach(s=>{ if(!have.has(key(s))) H.list.push(s); });
+  H.list.sort((a,b)=>a.dist-b.dist);
+  renderPick();
+  if (!S.placeLabel) reverseLabel(H.pos.lat,H.pos.lng).then(l=>{ if(l){ S.placeLabel=S.placeLabel||l; H.list.forEach(s=>{ if(!s.addr) s.area=l; }); if (!$("#fArea").value) $("#fArea").value=l; } });
+}
+function hereButtons(retry){
+  const last = !retry && H.list.length <= (H.page+1)*HERE_PAGE && H.ri >= HERE_RADII.length-1;
+  return el("div",{class:"row"},
+    el("button",{class:"btn sm ghost",style:"width:100%",onclick: retry ? (()=>{ H.busy=true; hereFetch().finally(()=>H.busy=false); }) : hereNext}, retry ? "↻ もう一度" : last ? "次へ ▶（最後）" : "次へ ▶"),
+    el("button",{class:"btn sm plain",style:"width:100%",onclick:()=>{ $("#fName").focus(); $("#fName").scrollIntoView({behavior:"smooth",block:"center"}); }}, "✏️ 手入力"));
+}
+async function hereNext(){
+  if (H.busy) return;
+  if (H.list.length > (H.page+1)*HERE_PAGE) { H.page++; renderPick(); return; }
+  // 手元の候補がなくなったら範囲を広げる
+  H.list.slice(H.page*HERE_PAGE).forEach(s=>H.shown.add(s.pid||s.osmId||(norm(s.name)+Math.round(s.lat*5000))));
+  if (H.ri < HERE_RADII.length-1) {
+    H.busy = true; H.ri++;
+    H.list.forEach(s=>H.shown.add(s.pid||s.osmId||(norm(s.name)+Math.round(s.lat*5000))));
+    H.list=[]; H.page=0;
+    try { await hereFetch(); } finally { H.busy=false; }
+    return;
+  }
+  H.done = true; renderPick();
 }
 function renderPick(){
-  const q=norm($("#pickQ").value); const box=$("#pickList"); box.textContent="";
-  (S.pickShops||[]).filter(s=>!q||norm(s.name).includes(q)).slice(0,40).forEach(s=>{
+  const box=$("#pickList"); box.textContent="";
+  if (H.done) {
+    box.append(el("div",{class:"note box",style:"margin:0"},"近くに候補が見つかりませんでした。下に店名を手入力してください（Google Mapsの共有テキストを貼り付けることもできます）。"));
+    box.append(el("button",{class:"btn sm plain",style:"width:100%",onclick:pickNear},"↻ 最初から探し直す"));
+    $("#fName").focus(); return;
+  }
+  const items = H.list.slice(H.page*HERE_PAGE, H.page*HERE_PAGE+HERE_PAGE);
+  if (H.pos) box.append(el("div",{class:"info"}, `📍 半径${HERE_RADII[H.ri]}m以内・近い順（位置の誤差 約${Math.round(H.pos.acc||0)}m）　${H.page*HERE_PAGE+1}〜${H.page*HERE_PAGE+items.length}件目 / ${H.list.length}件`));
+  if (!items.length) box.append(el("div",{class:"note",style:"margin:0"},"この範囲には見つかりませんでした。「次へ」で範囲を広げて探します。"));
+  items.forEach(s=>{
+    const v = findVisit(s);
     const sel = (s.pid && S.fExtra.placeId===s.pid) || (s.osmId && S.fExtra.osmId===s.osmId);
-    box.append(el("button",{type:"button",class:sel?"on":"", onclick:()=>{
-      const v = findVisit(s);
-      if (v) { openModal("revisit", v); toast("記録済みの店です。「また行った」として記録します"); return; }
-      setShopForm({name:s.name,genre:s.genre,area:s.area,lat:s.src==="osm"?s.lat:null,lng:s.src==="osm"?s.lng:null,osmId:s.osmId||"",placeId:s.pid||"",url:s.uri||""}); renderPick();
-    }}, el("span",{}, s.name, el("small",{style:"margin-left:6px"}, s.genre)), el("small",{}, fmtDist(s.dist))));
+    box.append(el("button",{type:"button",class:"cand"+(sel?" on":""), onclick:()=>{
+      if (v) { openModal("revisit", v); toast("記録済みのお店です。「また行った」として記録します"); return; }
+      setShopForm({name:s.name,genre:s.genre,area:s.area,lat:s.src==="osm"?s.lat:null,lng:s.src==="osm"?s.lng:null,osmId:s.osmId||"",placeId:s.pid||"",url:s.uri||""});
+      renderPick();
+      setTimeout(()=>$("#visitFields").scrollIntoView({behavior:"smooth",block:"start"}), 50);
+    }}, el("span",{style:"font-size:22px"}, sel ? "✅" : "🍽"),
+       el("span",{}, el("b",{}, s.name), el("small",{}, [s.genre, v ? `${v.count}回行った` : "", s.rating ? `Google★${s.rating.toFixed(1)}` : ""].filter(Boolean).join("・"))),
+       el("span",{class:"d"}, fmtDist(s.dist))));
   });
+  box.append(hereButtons(false));
 }
 function parsePaste(){
   const t=$("#paste").value.trim(); if(!t){$("#parsed").textContent="";return;}
@@ -1344,7 +1402,7 @@ $("#noChain").addEventListener("change", e=>{ S.prefs.noChain = e.target.checked
 $("#q").addEventListener("input", renderVisits);
 $("#sort").addEventListener("change", renderVisits);
 $("#pickNear").addEventListener("click", pickNear);
-$("#pickQ").addEventListener("input", renderPick);
+$("#hereQuick").addEventListener("click", ()=>{ openModal("new"); pickNear(); });
 $("#paste").addEventListener("input", parsePaste);
 $("#photoIn").addEventListener("change", e=>{ addPhotos(e.target.files); e.target.value=""; });
 $("#save").addEventListener("click", save);
