@@ -164,6 +164,10 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 .err{color:var(--low);font-size:12px;margin-top:6px}
 .attr{font-size:11px;color:var(--sub);text-align:center;margin-top:18px}
 .pc-add{display:none}
+.datalinks{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.datalinks a{flex:1 1 140px;display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;font-weight:700}
+.datalinks a small{display:block;font-weight:400;color:var(--sub);font-size:11px}
+.datalinks a .i{font-size:22px}
 
 @media (min-width:720px){
   .wrap{padding-bottom:32px}
@@ -240,6 +244,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
         <div class="panel">
           <h2>行ったリスト <button class="btn sm pc-add" data-act="add">＋ 追加</button></h2>
           <div id="verBanner"></div>
+          <div id="dataLinks"></div>
           <div class="kpis" id="kpis"></div>
           <div id="unrated"></div>
           <div class="tools">
@@ -332,6 +337,8 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <div id="savedList" class="hist"></div>
     <h4>店舗データ</h4>
     <div class="note" id="srcInfo" style="margin-top:0"></div>
+    <h4>データの保存先</h4>
+    <div id="dataLinks2"></div>
     <h4>同期（スプレッドシート）</h4>
     <div class="note" style="margin-top:0">Googleスプレッドシートに記録を保存し、スマホ・タブレット・PCで共有します。</div>
     <label class="label" for="sUrl">ウェブアプリのURL</label>
@@ -382,7 +389,7 @@ const S = {
   cfg:null, visits:[], pending:[], syncState:"local", syncing:false, serverVer:0, placesOn:null,
   settings:{savedPlaces:[]}, prefs:{autoSearch:true, timeAdjust:true},
   genre:"すべて", filterGenre:"すべて", onlyUnrated:false, pos:null, placeLabel:"", shops:null, src:"", searching:false, searchErr:"", timing:"", shown:30,
-  mode:"new", editing:null, fRating:0, fExtra:{}, newPhotos:[], pickShops:null, photoCache:{}, openPhotos:{}, rightView:"visits"
+  mode:"new", editing:null, fRating:0, fExtra:{}, newPhotos:[], pickShops:null, photoCache:{}, openPhotos:{}, rightView:"visits", sheetUrl:"", photoUrl:""
 };
 
 /* ---------- helpers ---------- */
@@ -587,11 +594,12 @@ async function pull(){
     S.serverVer = Number(j.ver)||1;
     if (S.serverVer >= 2) {
       S.placesOn = !!j.places;
+      S.sheetUrl = j.sheetUrl || ""; S.photoUrl = j.photoUrl || ""; ls.set("gn-links", {s:S.sheetUrl, p:S.photoUrl}); renderDataLinks();
       if (j.settings && typeof j.settings==="object") { S.settings = {savedPlaces:[], ...j.settings}; ls.set(K.settings, S.settings); renderSaved(); }
     }
     serverMerge(j.visits); setSync("ok");
   } catch(e){ setSync(e.code==="auth"?"auth":"error"); }
-  renderBanner(); renderAttr();
+  renderBanner(); renderAttr(); renderDataLinks();
 }
 async function flush(silent){
   if (!S.cfg || S.syncing) return;
@@ -616,6 +624,20 @@ function commit(op){
 function renderBanner(){
   const b=$("#verBanner"); b.textContent="";
   if (S.cfg && S.serverVer===1) b.append(el("div",{class:"banner"},"スプレッドシート側（Code.gs）を最新版に更新すると、訪問履歴・写真・Googleマップ検索・保存した場所の同期が使えるようになります。更新するまで、訪問履歴は最新の1回分だけ保存されます。"));
+}
+
+/* ---------- data links ---------- */
+function dataLinksEl(){
+  if (!S.cfg) return el("div",{class:"note",style:"margin:0 0 12px"},"同期を設定すると、記録を保存しているスプレッドシートをここから開けます。");
+  const box = el("div",{class:"datalinks"});
+  if (S.sheetUrl) box.append(el("a",{href:safeUrl(S.sheetUrl),target:"_blank",rel:"noopener"}, el("span",{class:"i"},"📄"), el("span",{}, "スプレッドシートを開く", el("small",{},"記録の保存先（visits・photosシート）"))));
+  else box.append(el("a",{href:"https://drive.google.com/drive/search?q="+encodeURIComponent("ごはんナビ"),target:"_blank",rel:"noopener"}, el("span",{class:"i"},"📄"), el("span",{}, "スプレッドシートを探す", el("small",{},"Googleドライブで検索（Code.gs更新で直接開けます）"))));
+  if (S.photoUrl) box.append(el("a",{href:safeUrl(S.photoUrl),target:"_blank",rel:"noopener"}, el("span",{class:"i"},"🖼"), el("span",{}, "写真フォルダを開く", el("small",{},"Googleドライブ「ごはんナビ写真」"))));
+  return box;
+}
+function renderDataLinks(){
+  const a=$("#dataLinks"), b=$("#dataLinks2"); a.textContent=""; b.textContent="";
+  a.append(dataLinksEl()); b.append(dataLinksEl());
 }
 
 /* ---------- settings (saved places) & prefs ---------- */
@@ -1177,7 +1199,7 @@ function openSettings(){
     : S.serverVer<2 ? "スプレッドシート側（Code.gs）が旧版です。最新版に更新するとGoogleマップのデータが使えます。現在はOpenStreetMapを使用中です。"
     : S.placesOn ? "Googleマップのデータを使用中です（1日30回まで。超えたら自動でOpenStreetMapに切り替え）。"
     : "Googleマップの鍵が未登録のため、OpenStreetMapを使用中です。");
-  renderSaved();
+  renderSaved(); renderDataLinks();
   $("#settings").classList.add("on");
 }
 async function connect(){
@@ -1246,7 +1268,7 @@ $("#save").addEventListener("click", save);
 $("#cOk").addEventListener("click", ()=>{ if(confirmAct) confirmAct(); confirmAct=null; closeModals(); });
 $("#syncBtn").addEventListener("click", openSettings);
 $("#sSave").addEventListener("click", connect);
-$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.serverVer=0; S.placesOn=null; ls.del(K.cfg); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
+$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.serverVer=0; S.placesOn=null; S.sheetUrl=""; S.photoUrl=""; ls.del(K.cfg); ls.del("gn-links"); renderDataLinks(); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
 $("#syncNow").addEventListener("click", async ()=>{ await pull(); toast(S.syncState==="ok"?"同期しました":"同期できませんでした"); });
 $("#shareCopy").addEventListener("click", async ()=>{ try{ await navigator.clipboard.writeText($("#shareUrl").value); toast("コピーしました"); }catch(e){ $("#shareUrl").select(); toast("選択してコピーしてください"); } });
 $("#pAuto").addEventListener("change", e=>{ S.prefs.autoSearch=e.target.checked; savePrefs(); });
@@ -1263,8 +1285,9 @@ S.visits = ls.get(K.cache, []).filter(v=>v&&v.id&&v.name).map(normalizeVisit);
 S.pending = ls.get(K.pend, []);
 S.prefs = {...S.prefs, ...ls.get(K.prefs, {})};
 S.settings = {savedPlaces:[], ...ls.get(K.settings, {})};
+{ const l = ls.get("gn-links", {}); S.sheetUrl = l.s||""; S.photoUrl = l.p||""; }
 readSetupHash();
-fillGenreSelect(); renderGenres(); renderSaved(); renderAll(); renderAttr();
+fillGenreSelect(); renderGenres(); renderSaved(); renderAll(); renderAttr(); renderDataLinks();
 setSync(S.cfg ? "syncing" : "local");
 const pulled = pull();
 // N: 開いたら自動で現在地検索（位置情報がすでに許可されているときだけ）

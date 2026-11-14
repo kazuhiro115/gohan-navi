@@ -32,6 +32,7 @@ function setup() {
   }
   photoFolder_(); // ドライブの権限確認を兼ねる
   Logger.log('合言葉（アプリの設定画面に入力）： ' + token);
+  Logger.log('記録のスプレッドシート： ' + SpreadsheetApp.getActive().getUrl());
   Logger.log('Googleマップ検索： ' + (props.getProperty('PLACES_KEY') ? '有効（鍵が登録済み）' : '未設定（OpenStreetMapを使用）'));
 }
 
@@ -75,7 +76,10 @@ function photoSheet_() {
 }
 function photoFolder_() {
   const it = DriveApp.getFoldersByName(PHOTO_FOLDER);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER);
+  const f = it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER);
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('PHOTO_FOLDER_URL') !== f.getUrl()) props.setProperty('PHOTO_FOLDER_URL', f.getUrl());
+  return f;
 }
 function header_(s) { return s.getRange(1, 1, 1, s.getLastColumn()).getDisplayValues()[0]; }
 function rows_(s) {
@@ -239,7 +243,9 @@ function placesNearby_(lat, lng, radius) {
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (!authorized_(p.token)) return out_({ ok: false, error: 'auth' });
-  return out_({ ok: true, ver: VERSION, visits: list_(), settings: settings_(), places: !!PropertiesService.getScriptProperties().getProperty('PLACES_KEY') });
+  const props = PropertiesService.getScriptProperties();
+  return out_({ ok: true, ver: VERSION, visits: list_(), settings: settings_(), places: !!props.getProperty('PLACES_KEY'),
+    sheetUrl: SpreadsheetApp.getActive().getUrl(), photoUrl: props.getProperty('PHOTO_FOLDER_URL') || '' });
 }
 
 function doPost(e) {
