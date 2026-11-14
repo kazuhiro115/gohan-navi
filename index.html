@@ -418,16 +418,23 @@ function cleanVisit(v){
 }
 
 /* ---------- location & shops ---------- */
-function getPosition(){
+const SHOP_CACHE_KEY = "gn-shopcache", SHOP_CACHE_MS = 15*60*1000;
+function geoOnce(opts){
   return new Promise((res,rej)=>{
     if (!navigator.geolocation) return rej({code:"nogeo"});
     navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude, lng:p.coords.longitude, acc:p.coords.accuracy}),
-      e=>rej({code: e.code===1 ? "denied" : "fail"}), {enableHighAccuracy:true, timeout:15000, maximumAge:30000});
+      e=>rej({code: e.code===1 ? "denied" : "fail"}), opts);
   });
+}
+// まず速い測位（Wi-Fi・基地局、直近2分のキャッシュ可）→ だめなときだけGPSの高精度測位
+async function getPosition(){
+  try { return await geoOnce({enableHighAccuracy:false, timeout:5000, maximumAge:120000}); }
+  catch(e){ if (e.code==="denied"||e.code==="nogeo") throw e; }
+  return await geoOnce({enableHighAccuracy:true, timeout:12000, maximumAge:300000});
 }
 async function reverseLabel(lat,lng){
   try {
-    const r = await fetchT(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=16&accept-language=ja`, {}, 8000);
+    const r = await fetchT(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=16&accept-language=ja`, {}, 6000);
     const j = await r.json(); const a = j.address||{};
     const big = a.city||a.town||a.village||a.county||"";
     const small = a.quarter||a.neighbourhood||a.suburb||a.city_district||"";
@@ -439,40 +446,76 @@ async function geocode(q){
   const j = await r.json(); if (!j.length) throw {code:"notfound"};
   return {lat:Number(j[0].lat), lng:Number(j[0].lon), label:q};
 }
-async function fetchShops(lat,lng,radius){
-  const q = `[out:json][timeout:20];nwr(around:${radius},${lat},${lng})["amenity"~"^(restaurant|fast_food|cafe|pub|bar|food_court|biergarten)$"]["name"];out center 300;`;
-  let lastErr;
-  for (const ep of OVERPASS) {
-    try {
-      const r = await fetchT(ep, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q)}, 25000);
-      if (!r.ok) throw new Error("http "+r.status);
-      const j = await r.json();
-      const seen = new Set();
-      return (j.elements||[]).map(e=>{
-        const t=e.tags||{}, la=e.lat??e.center?.lat, ln=e.lon??e.center?.lon;
-        if (la==null||ln==null) return null;
-        const name = t["name:ja"]||t.name;
-        const addr = [t["addr:city"], t["addr:quarter"]||t["addr:suburb"], t["addr:neighbourhood"]].filter(Boolean).join("");
-        return {osmId:e.type[0]+e.id, name, genre:detectGenre(t,name), lat:la, lng:ln, hours:t.opening_hours||"", addr,
-          dist:distM(lat,lng,la,ln), cuisine:t.cuisine||""};
-      }).filter(s=>{ if(!s) return false; const k=norm(s.name)+Math.round(s.lat*2000)+Math.round(s.lng*2000); if(seen.has(k)) return false; seen.add(k); return true; });
-    } catch(e){ lastErr = e; }
-  }
-  throw lastErr || new Error("overpass");
+function parseShops(j, lat, lng){
+  const seen = new Set();
+  return (j.elements||[]).map(e=>{
+    const t=e.tags||{}, la=e.lat??e.center?.lat, ln=e.lon??e.center?.lon;
+    if (la==null||ln==null) return null;
+    const name = t["name:ja"]||t.name;
+    const addr = [t["addr:city"], t["addr:quarter"]||t["addr:suburb"], t["addr:neighbourhood"]].filter(Boolean).join("");
+    return {osmId:e.type[0]+e.id, name, genre:detectGenre(t,name), lat:la, lng:ln, hours:t.opening_hours||"", addr, cuisine:t.cuisine||""};
+  }).filter(s=>{ if(!s) return false; const k=norm(s.name)+Math.round(s.lat*2000)+Math.round(s.lng*2000); if(seen.has(k)) return false; seen.add(k); return true; });
 }
-async function searchAt(pos, label){
-  S.pos = pos; S.searching = true; S.searchErr = ""; S.shops = null; S.shown = 30; renderWhere(label||"現在地"); renderResults();
-  const lp = label ? Promise.resolve(label) : reverseLabel(pos.lat,pos.lng);
+// 3つのサーバーに時間差で問い合わせ、最初に返ってきた結果を使う（遅いサーバーを待ち続けない）
+function overpassRace(q){
+  return new Promise((resolve,reject)=>{
+    const ctrls=[]; let done=false, failed=0, started=0; const timers=[];
+    const finish=()=>{ done=true; timers.forEach(clearTimeout); ctrls.forEach(c=>c.abort()); };
+    const start=i=>{
+      if (done || i>=OVERPASS.length) return;
+      started++; const c=new AbortController(); ctrls.push(c);
+      const t=setTimeout(()=>c.abort(), 15000);
+      fetch(OVERPASS[i], {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q), signal:c.signal})
+        .then(r=>{ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
+        .then(j=>{ clearTimeout(t); if(done) return; finish(); resolve({j, ep:new URL(OVERPASS[i]).host}); })
+        .catch(()=>{ clearTimeout(t); if(done) return; failed++;
+          if (failed>=OVERPASS.length) { finish(); reject(new Error("overpass")); }
+          else if (started===failed) start(started); });   // 失敗したらすぐ次へ
+    };
+    start(0);
+    timers.push(setTimeout(()=>start(1), 2500));   // 2.5秒で返らなければ2台目も
+    timers.push(setTimeout(()=>start(2), 5000));   // 5秒で3台目も
+  });
+}
+async function fetchShops(lat,lng,radius){
+  // 同じ場所（約100m以内）・同じ範囲なら15分間は保存済みの結果を即表示
+  const key = `${lat.toFixed(3)},${lng.toFixed(3)},${radius}`;
+  const cache = ls.get(SHOP_CACHE_KEY, {});
+  let raw, src;
+  if (cache[key] && Date.now()-cache[key].t < SHOP_CACHE_MS) { raw = cache[key].j; src = "保存済み"; }
+  else {
+    const q = `[out:json][timeout:12];nwr(around:${radius},${lat},${lng})["amenity"~"^(restaurant|fast_food|cafe|pub|bar|food_court|biergarten)$"]["name"];out center qt 300;`;
+    const r = await overpassRace(q); raw = r.j; src = r.ep;
+    const slim = {elements:(raw.elements||[]).map(e=>({type:e.type,id:e.id,lat:e.lat,lon:e.lon,center:e.center,tags:e.tags}))};
+    const next = {}; for (const [k,v] of Object.entries(cache)) if (Date.now()-v.t < SHOP_CACHE_MS) next[k]=v;
+    next[key] = {t:Date.now(), j:slim}; ls.set(SHOP_CACHE_KEY, next);
+  }
+  const shops = parseShops(raw, lat, lng).map(s=>({...s, dist:distM(lat,lng,s.lat,s.lng)}));
+  shops.src = src;
+  return shops;
+}
+async function searchAt(pos, label, geoMs){
+  S.pos = pos; S.searching = true; S.searchErr = ""; S.shops = null; S.shown = 30; S.timing = "";
+  renderWhere(label||S.placeLabel||"現在地"); renderResults();
+  if (!label) reverseLabel(pos.lat,pos.lng).then(l=>{ if (S.pos===pos) { S.placeLabel = l; renderWhere(l || "現在地"); } });
+  else S.placeLabel = label;
+  const t0 = performance.now();
   try {
     const shops = await fetchShops(pos.lat,pos.lng,Number($("#radius").value));
     S.shops = shops;
-  } catch(e){ S.searchErr = "お店のデータを取得できませんでした。電波の良い場所で、少し時間をおいてもう一度お試しください。"; }
+    S.timing = (geoMs!=null ? `位置 ${(geoMs/1000).toFixed(1)}秒・` : "") + `検索 ${((performance.now()-t0)/1000).toFixed(1)}秒（${shops.src}）`;
+  } catch(e){ S.searchErr = "お店のデータを取得できませんでした。地図データのサーバーが混み合っている可能性があります。少し時間をおいて「再検索」してください。"; }
   S.searching = false;
-  S.placeLabel = await lp; renderWhere(S.placeLabel || label || "現在地"); renderResults();
+  renderWhere(S.placeLabel || label || "現在地"); renderResults();
 }
 async function locate(){
   const b = $("#locate"); b.disabled = true; b.textContent = "📍 位置を確認中…";
-  try { const p = await getPosition(); await searchAt(p, ""); }
+  const t0 = performance.now();
+  try {
+    const p = await getPosition();
+    b.textContent = "🔍 お店を検索中…";
+    await searchAt(p, "", performance.now()-t0);
+  }
   catch(e){
     const msg = e.code==="denied" ? "位置情報の利用が許可されていません。ブラウザ（iPhoneは設定→プライバシー→位置情報サービス→Safari）で許可するか、下の「場所を入力して探す」を使ってください。"
       : "位置を取得できませんでした。屋外で再度お試しいただくか、下の「場所を入力して探す」を使ってください。";
@@ -525,11 +568,12 @@ function renderWhere(label){
   const w=$("#where"); w.textContent="";
   if (!S.pos) return;
   w.append("📍 ", el("b",{}, label), S.pos.acc ? el("span",{style:"color:var(--sub)"}, `（誤差 約${Math.round(S.pos.acc)}m）`) : "",
-    el("a",{href:mapsSearch(`${S.pos.lat},${S.pos.lng}`),target:"_blank",rel:"noopener",style:"font-size:12px"},"地図で確認"));
+    el("a",{href:mapsSearch(`${S.pos.lat},${S.pos.lng}`),target:"_blank",rel:"noopener",style:"font-size:12px"},"地図で確認"),
+    S.timing && el("span",{style:"color:var(--sub);font-size:11px;width:100%"}, "⏱ "+S.timing));
 }
 function renderResults(){
   const w=$("#resultsWrap"); w.textContent="";
-  if (S.searching) { w.append(el("div",{class:"loading"},el("div",{class:"spin"}),"近くのお店を探しています…")); return; }
+  if (S.searching) { w.append(el("div",{class:"loading"},el("div",{class:"spin"}),"近くのお店を探しています…（通常2〜5秒）")); return; }
   if (S.searchErr) { w.append(el("div",{class:"note box",style:"margin-top:14px"},S.searchErr)); return; }
   if (!S.shops) { w.append(el("div",{class:"note",style:"margin:14px 4px"},"「現在地の近くを探す」を押すと、近くのお店を表示します。記録が増えるほど、★の高いジャンルが上に来るようになります。")); return; }
   let rows = scored();
@@ -620,17 +664,22 @@ function openModal(v={}, isEdit){
   $("#modal").classList.add("on");
 }
 async function pickNear(){
-  const b=$("#pickNear"); b.disabled=true; b.textContent="📍 近くのお店を探しています…";
+  const b=$("#pickNear"); b.disabled=true; b.textContent="📍 位置を確認中…";
   try {
-    let pos = S.pos;
-    try { pos = await getPosition(); } catch(e){ if(!pos) throw e; }
-    const label = await reverseLabel(pos.lat,pos.lng);
-    let shops = await fetchShops(pos.lat,pos.lng,300);
-    if (shops.length < 5) shops = await fetchShops(pos.lat,pos.lng,800);
+    let pos;
+    try { pos = await getPosition(); } catch(e){ if(!S.pos) throw e; pos = S.pos; }
+    b.textContent="🔍 近くのお店を検索中…";
+    const labelP = reverseLabel(pos.lat,pos.lng);
+    let shops;
+    // 直前の検索結果がほぼ同じ場所なら、それを使い回す
+    if (S.shops && S.pos && distM(S.pos.lat,S.pos.lng,pos.lat,pos.lng) < 150) shops = S.shops.map(s=>({...s, dist:distM(pos.lat,pos.lng,s.lat,s.lng)}));
+    else shops = await fetchShops(pos.lat,pos.lng,600);
     shops.sort((a,b)=>a.dist-b.dist);
-    S.pickShops = shops.map(s=>({...s, area:s.addr||label}));
+    S.pickShops = shops;
     $("#pickQ").style.display=""; renderPick();
     if (!shops.length) $("#pickList").append(el("div",{class:"note"},"近くにお店が見つかりませんでした。下に店名を入力してください。"));
+    labelP.then(l=>{ (S.pickShops||[]).forEach(s=>{ if(!s.addr) s.area=l; }); });
+    S.pickShops.forEach(s=>{ s.area = s.addr || S.placeLabel || ""; });
   } catch(e){
     $("#pickList").textContent=""; $("#pickList").append(el("div",{class:"err"}, e.code==="denied" ? "位置情報が許可されていません。店名を手入力してください。" : "近くのお店を取得できませんでした。店名を手入力してください。"));
   } finally { b.disabled=false; b.textContent="📍 今いる場所の近くから選ぶ"; }
