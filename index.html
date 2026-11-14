@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#c2410c">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ごはんナビ">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>ごはんナビ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -13,12 +18,12 @@
 :root{
   --bg:#f6f1e8; --card:#fffdf8; --ink:#2a2420; --sub:#6f655c; --line:#e6dccd;
   --accent:#c2410c; --accent-d:#9a3412; --accent-l:#fde7d6;
-  --star:#e8a317; --ok:#2f7d4f; --warn:#b45309; --low:#9f1239;
+  --star:#e8a317; --ok:#2f7d4f; --ok-l:#e3f1e8; --warn:#b45309; --warn-l:#fdf0d9; --low:#9f1239; --low-l:#fbe4ea;
   --radius:16px; --shadow:0 1px 2px rgba(60,40,20,.06),0 4px 14px rgba(60,40,20,.06);
 }
 @media (prefers-color-scheme:dark){
   :root{--bg:#1b1715;--card:#26201d;--ink:#f3ece4;--sub:#b3a698;--line:#3a312b;
-    --accent:#f97316;--accent-d:#fb923c;--accent-l:#3b2416;--shadow:none}
+    --accent:#f97316;--accent-d:#fb923c;--accent-l:#3b2416;--ok:#4ade80;--ok-l:#173322;--warn:#fbbf24;--warn-l:#3a2c10;--low:#fb7185;--low-l:#3b1820;--shadow:none}
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);
@@ -26,39 +31,44 @@ html,body{margin:0;background:var(--bg);color:var(--ink);
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 a{color:var(--accent-d)}
-.wrap{max-width:1360px;margin:0 auto;padding:calc(12px + env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom))}
+.wrap{max-width:1360px;margin:0 auto;padding:calc(12px + env(safe-area-inset-top)) 16px calc(100px + env(safe-area-inset-bottom))}
 header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
-.brand{display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
 .logo{width:40px;height:40px;border-radius:12px;background:var(--accent);display:grid;place-items:center;color:#fff;font-weight:900;font-size:20px;flex:0 0 auto}
 h1{font-size:22px;margin:0;font-weight:900}
+.tag{font-size:12px;color:var(--sub)}
 .sync{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--sub);flex:0 0 auto}
 .dot.on{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.off{background:var(--low)}
 
 .tabs{display:none;gap:6px;background:var(--card);padding:5px;border-radius:999px;border:1px solid var(--line);margin-bottom:14px;width:max-content}
-.tabs button{border:0;background:none;padding:9px 18px;border-radius:999px;font-weight:700;color:var(--sub)}
+.tabs button{border:0;background:none;padding:9px 16px;border-radius:999px;font-weight:700;color:var(--sub)}
 .tabs button.on{background:var(--accent);color:#fff}
 .bnav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:1px solid var(--line);
-  display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
+  display:grid;grid-template-columns:repeat(4,1fr);padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
 .bnav button{border:0;background:none;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--sub);font-weight:700}
 .bnav .ic{font-size:21px;line-height:1}
 .bnav button.on{color:var(--accent)}
 .bnav .add .ic{background:var(--accent);color:#fff;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;margin-top:-20px;box-shadow:0 4px 12px rgba(194,65,12,.35);font-size:24px}
+.seg{display:none;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:12px}
+.seg button{flex:1;border:0;background:none;padding:8px;border-radius:9px;font-weight:700;color:var(--sub)}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 
 .grid{display:grid;grid-template-columns:1fr;gap:16px}
 .view{display:none}.view.on{display:block}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.panel+.panel{margin-top:14px}
 .panel h2{font-size:17px;margin:0 0 12px;font-weight:900;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .label{font-size:12px;font-weight:700;color:var(--sub);margin:14px 0 6px;display:block}
 .input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:16px;outline:none}
 .input:focus{border-color:var(--accent)}
-textarea.input{min-height:76px;resize:vertical}
+textarea.input{min-height:70px;resize:vertical}
 .row{display:flex;gap:8px}.row>*{flex:1;min-width:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border:1px solid var(--line);background:var(--bg);padding:8px 12px;border-radius:999px;font-size:14px;white-space:nowrap}
 .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
 .chip.sm{padding:5px 10px;font-size:12px}
-.btn{border:0;border-radius:12px;padding:13px 16px;font-weight:900;font-size:16px;background:var(--accent);color:#fff;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.btn{border:0;border-radius:12px;padding:13px 16px;font-weight:900;font-size:16px;background:var(--accent);color:#fff;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;text-align:center}
 .btn:hover{background:var(--accent-d)}
 .btn:disabled{opacity:.55;cursor:default}
 .btn.big{padding:18px 16px;font-size:18px;border-radius:14px}
@@ -66,24 +76,38 @@ textarea.input{min-height:76px;resize:vertical}
 .btn.sm{padding:8px 12px;font-size:14px;width:auto;border-radius:10px}
 .btn.plain{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
 .btn.danger{background:var(--low)}
+.checks{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:12px;font-size:14px}
+.checks label{display:flex;align-items:center;gap:6px}
 .note{font-size:12px;color:var(--sub);line-height:1.6;margin-top:10px}
 .note.box{background:var(--accent-l);border-radius:10px;padding:10px 12px;color:var(--ink)}
-.where{font-size:13px;margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.banner{background:var(--warn-l);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.6;margin-bottom:12px}
+.where{font-size:13px;margin-top:10px;display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap}
 .where b{font-weight:900}
+.linkbtn{border:0;background:none;color:var(--accent-d);font-weight:700;font-size:12px;padding:0;text-decoration:underline}
 details.alt{margin-top:12px}
 details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:pointer}
 
-.results{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:7px}
+.results{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:7px;min-width:0}
 .card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
 .card .name{font-weight:900;font-size:17px;line-height:1.35;word-break:break-word}
 .dist{font-weight:900;color:var(--accent-d);white-space:nowrap;font-size:14px}
-.meta{font-size:12px;color:var(--sub);display:flex;flex-wrap:wrap;gap:4px 10px}
+.meta{font-size:12px;color:var(--sub);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
 .why{font-size:12px;display:flex;flex-wrap:wrap;gap:4px}
 .why span{background:var(--accent-l);padding:2px 8px;border-radius:999px}
 .why span.neg{background:transparent;border:1px solid var(--line);color:var(--sub)}
+.st{font-size:11px;font-weight:900;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.st.open{background:var(--ok-l);color:var(--ok)} .st.closing{background:var(--warn-l);color:var(--warn)} .st.closed{background:var(--low-l);color:var(--low)}
+.gr{font-weight:700;color:var(--ink)}
 .hours{font-size:12px;color:var(--sub);word-break:break-all}
-.acts{display:flex;gap:8px}.acts>*{flex:1}
+.acts{display:flex;gap:6px}.acts>*{flex:1;min-width:0;padding-left:6px;padding-right:6px;white-space:nowrap}
+.hero{border:2px solid var(--accent);background:linear-gradient(180deg,var(--accent-l),var(--card) 70%);padding:16px;margin-top:14px}
+.hero .lbl{font-size:12px;font-weight:900;color:var(--accent-d)}
+.hero .name{font-size:22px}
+.hero .reason{font-size:14px;line-height:1.6}
+.sect{font-weight:900;margin:18px 2px 0;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.hscroll{display:flex;gap:10px;overflow-x:auto;padding:10px 2px 4px;scroll-snap-type:x mandatory}
+.hscroll .card{flex:0 0 240px;scroll-snap-align:start}
 .stars{display:inline-flex;gap:2px}
 .stars button{border:0;background:none;padding:2px;font-size:22px;line-height:1;color:var(--line)}
 .stars button.on{color:var(--star)}
@@ -91,7 +115,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
 .kpi{background:var(--bg);border-radius:12px;padding:10px 12px}
 .kpi .k{font-size:11px;color:var(--sub);font-weight:700}
-.kpi .v{font-size:22px;font-weight:900;margin-top:2px}
+.kpi .v{font-size:22px;font-weight:900;margin-top:2px;word-break:break-all}
 .kpi .v small{font-size:12px;font-weight:500;color:var(--sub);margin-left:3px}
 .tools{display:flex;gap:8px;margin-bottom:10px}
 .tools .input{padding:9px 12px;font-size:15px}
@@ -104,18 +128,37 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 .memo{font-size:13px;line-height:1.55;background:var(--bg);border-radius:10px;padding:8px 10px;white-space:pre-wrap;word-break:break-word}
 .iconbtn{border:0;background:none;color:var(--sub);font-size:13px;padding:4px 6px;border-radius:8px}
 .iconbtn:hover{background:var(--bg)}
+.thumbs{display:flex;gap:6px;overflow-x:auto}
+.thumbs a,.thumbs .ph{flex:0 0 auto;position:relative}
+.thumbs img{width:84px;height:84px;object-fit:cover;border-radius:10px;display:block;background:var(--bg)}
+.thumbs .x{position:absolute;top:2px;right:2px;border:0;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:12px;line-height:22px;padding:0}
+.hist{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.hist .h{display:flex;gap:8px;align-items:center;font-size:13px;background:var(--bg);border-radius:10px;padding:7px 10px}
+.hist .h .m{flex:1;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;margin-top:8px}
 .pick button{text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center}
 .pick button small{color:var(--sub);white-space:nowrap}
 .pick button.on{border-color:var(--accent);background:var(--accent-l)}
+.bars{display:flex;align-items:flex-end;gap:4px;height:130px;padding-top:8px}
+.bars .b{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;height:100%;min-width:0}
+.bars .b i{display:block;width:100%;max-width:26px;background:var(--accent);border-radius:5px 5px 2px 2px;min-height:2px}
+.bars .b span{font-size:10px;color:var(--sub);white-space:nowrap}
+.bars .b em{font-size:10px;font-style:normal;font-weight:700}
+.hbar{display:grid;grid-template-columns:88px 1fr 40px;gap:8px;align-items:center;font-size:13px;margin:6px 0}
+.hbar .t{height:12px;background:var(--bg);border-radius:6px;overflow:hidden}
+.hbar .t i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.rank{display:flex;flex-direction:column;gap:6px}
+.rank .r{display:flex;gap:10px;align-items:center;background:var(--bg);border-radius:10px;padding:8px 10px;font-size:14px}
+.rank .r b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .modal{position:fixed;inset:0;z-index:50;background:rgba(20,12,6,.45);display:none;align-items:flex-end;justify-content:center}
 .modal.on{display:flex}
 .sheet{background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
-.sheet h3{margin:0 0 4px;font-size:18px;font-weight:900;display:flex;justify-content:space-between;align-items:center}
-.sheet .x{border:0;background:var(--bg);width:34px;height:34px;border-radius:50%;font-size:18px}
+.sheet h3{margin:0 0 4px;font-size:18px;font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sheet .x{border:0;background:var(--bg);width:34px;height:34px;border-radius:50%;font-size:18px;flex:0 0 auto}
 .sheet .foot{display:flex;gap:8px;margin-top:16px}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
+.sheet h4{font-size:14px;margin:18px 0 4px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.on{opacity:1}
 .ok{color:var(--ok);font-size:12px;margin-top:6px}
 .err{color:var(--low);font-size:12px;margin-top:6px}
@@ -135,8 +178,11 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 }
 @media (min-width:1100px){
   .tabs{display:none}
-  .grid{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);align-items:start}
-  .view{display:block!important}
+  .grid{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);align-items:start}
+  #v-search{display:block}
+  #right .view{display:none}
+  #right .view.pc-on{display:block}
+  .seg{display:flex}
   .list{grid-template-columns:1fr}
 }
 </style>
@@ -146,7 +192,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
   <header>
     <div class="brand">
       <div class="logo">食</div>
-      <div><h1>ごはんナビ</h1><div style="font-size:12px;color:var(--sub)">現在地でおすすめ → 行ったら記録</div></div>
+      <div><h1>ごはんナビ</h1><div class="tag">現在地でおすすめ → 行ったら記録</div></div>
     </div>
     <button class="sync" id="syncBtn" title="同期・設定"><span class="dot" id="syncDot"></span><span id="syncTxt">…</span></button>
   </header>
@@ -154,6 +200,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
   <div class="tabs" id="tabs">
     <button data-v="search" class="on">📍 さがす</button>
     <button data-v="visits">📒 行ったリスト</button>
+    <button data-v="stats">📊 振り返り</button>
     <button data-act="add">＋ 追加</button>
   </div>
 
@@ -161,22 +208,25 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <section class="view on" id="v-search">
       <div class="panel">
         <button class="btn big" id="locate">📍 現在地の近くを探す</button>
+        <div class="chips" id="savedChips" style="margin-top:10px"></div>
         <div class="where" id="where"></div>
-
         <div class="row">
           <div><label class="label" for="radius">範囲</label>
             <select class="input" id="radius"><option value="300">300m</option><option value="600" selected>600m</option><option value="1000">1km</option><option value="2000">2km</option></select></div>
           <div><label class="label" for="order">並び順</label>
-            <select class="input" id="order"><option value="rec">おすすめ順</option><option value="dist">近い順</option></select></div>
+            <select class="input" id="order"><option value="rec">おすすめ順</option><option value="dist">近い順</option><option value="google">Google評価順</option></select></div>
         </div>
         <label class="label">ジャンル</label>
         <div class="chips" id="genres"></div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-top:12px"><input type="checkbox" id="onlyNew"> まだ行っていない店だけ</label>
-
+        <div class="checks">
+          <label><input type="checkbox" id="onlyNew"> まだ行っていない店だけ</label>
+          <label><input type="checkbox" id="hideClosed"> 閉まっている店を隠す</label>
+          <label id="kidsWrap" style="display:none"><input type="checkbox" id="kidsOnly"> 子連れOKの店</label>
+        </div>
         <details class="alt" id="altBox">
-          <summary>位置情報が使えないとき：場所を入力して探す</summary>
+          <summary>場所を入力して探す（旅行先・位置情報が使えないとき）</summary>
           <div class="row" style="margin-top:8px">
-            <input class="input" id="placeQ" placeholder="例：蒲田駅、渋谷駅南口" autocomplete="off" enterkeyhint="search" style="flex:3">
+            <input class="input" id="placeQ" placeholder="例：蒲田駅、京都駅八条口" autocomplete="off" enterkeyhint="search" style="flex:3">
             <button class="btn sm" id="placeGo" style="flex:1">探す</button>
           </div>
         </details>
@@ -184,34 +234,44 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
       <div id="resultsWrap"></div>
     </section>
 
-    <section class="view" id="v-visits">
-      <div class="panel">
-        <h2>行ったリスト <button class="btn sm pc-add" data-act="add">＋ 追加</button></h2>
-        <div class="kpis" id="kpis"></div>
-        <div class="tools">
-          <input class="input" id="q" placeholder="店名・エリア・メモで検索">
-          <select class="input" id="sort">
-            <option value="date">新しい順</option><option value="rating">評価が高い順</option><option value="ratingAsc">評価が低い順</option><option value="name">名前順</option>
-          </select>
+    <div id="right">
+      <div class="seg" id="seg"><button data-v="visits" class="on">📒 行ったリスト</button><button data-v="stats">📊 振り返り</button></div>
+      <section class="view pc-on" id="v-visits">
+        <div class="panel">
+          <h2>行ったリスト <button class="btn sm pc-add" data-act="add">＋ 追加</button></h2>
+          <div id="verBanner"></div>
+          <div class="kpis" id="kpis"></div>
+          <div id="unrated"></div>
+          <div class="tools">
+            <input class="input" id="q" placeholder="店名・エリア・メモで検索">
+            <select class="input" id="sort">
+              <option value="date">新しい順</option><option value="rating">評価が高い順</option><option value="count">よく行く順</option><option value="ratingAsc">評価が低い順</option><option value="name">名前順</option>
+            </select>
+          </div>
+          <div class="chips" id="fgenres" style="margin-bottom:12px"></div>
+          <div class="list" id="list"></div>
         </div>
-        <div class="chips" id="fgenres" style="margin-bottom:12px"></div>
-        <div class="list" id="list"></div>
-      </div>
-    </section>
+      </section>
+      <section class="view" id="v-stats">
+        <div id="statsWrap"></div>
+      </section>
+    </div>
   </div>
-  <div class="attr">店舗データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+  <div class="attr" id="attr">店舗データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
 </div>
 
 <nav class="bnav">
   <button data-v="search" class="on"><span class="ic">📍</span>さがす</button>
+  <button data-v="visits"><span class="ic">📒</span>行った</button>
   <button data-act="add" class="add"><span class="ic">＋</span>追加</button>
-  <button data-v="visits"><span class="ic">📒</span>行ったリスト</button>
+  <button data-v="stats"><span class="ic">📊</span>振り返り</button>
 </nav>
 
-<!-- 追加・編集 -->
+<!-- 追加・また行った・編集 -->
 <div class="modal" id="modal" role="dialog" aria-modal="true">
   <div class="sheet">
     <h3><span id="mTitle">行った店を追加</span><button class="x" data-close>×</button></h3>
+    <div id="mShopName" style="font-weight:900;font-size:16px;display:none"></div>
     <div id="pickBox">
       <button class="btn ghost" id="pickNear" style="margin-top:8px">📍 今いる場所の近くから選ぶ</button>
       <input class="input" id="pickQ" placeholder="店名で絞り込み" style="display:none;margin-top:8px" autocomplete="off">
@@ -222,19 +282,36 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
         <div class="ok" id="parsed"></div>
       </details>
     </div>
-    <label class="label" for="fName">店名 <span style="color:var(--low)">*</span></label>
-    <input class="input" id="fName" autocomplete="off">
-    <div class="row">
-      <div><label class="label" for="fGenre">ジャンル</label><select class="input" id="fGenre"></select></div>
-      <div><label class="label" for="fDate">行った日</label><input class="input" type="date" id="fDate"></div>
+    <div id="shopFields">
+      <label class="label" for="fName">店名 <span style="color:var(--low)">*</span></label>
+      <input class="input" id="fName" autocomplete="off">
+      <div class="row">
+        <div><label class="label" for="fGenre">ジャンル</label><select class="input" id="fGenre"></select></div>
+        <div><label class="label" for="fArea">エリア</label><input class="input" id="fArea" placeholder="例：西蒲田" autocomplete="off"></div>
+      </div>
     </div>
-    <label class="label" for="fArea">エリア</label>
-    <input class="input" id="fArea" placeholder="例：西蒲田" autocomplete="off">
-    <label class="label">評価</label>
-    <div class="stars big" id="fStars"></div>
-    <div style="font-size:12px;color:var(--sub)" id="fStarText"></div>
-    <label class="label" for="fMemo">メモ（任意）</label>
-    <textarea class="input" id="fMemo" placeholder="食べたもの、また行きたいか、子どもの反応など"></textarea>
+    <div id="visitFields">
+      <h4 id="visitHead">今回の訪問</h4>
+      <div class="row">
+        <div><label class="label" for="fDate">行った日</label><input class="input" type="date" id="fDate"></div>
+      </div>
+      <label class="label">評価</label>
+      <div class="stars big" id="fStars"></div>
+      <div style="font-size:12px;color:var(--sub)" id="fStarText"></div>
+      <label class="label" for="fMemo">メモ（任意）</label>
+      <textarea class="input" id="fMemo" placeholder="食べたもの、また行きたいか、子どもの反応など"></textarea>
+      <div id="photoBox">
+        <label class="label">写真（任意・3枚まで）</label>
+        <div class="thumbs" id="photoPrev"></div>
+        <label class="btn plain sm" style="margin-top:8px;display:inline-flex">📷 写真を追加<input type="file" id="photoIn" accept="image/*" multiple hidden></label>
+      </div>
+    </div>
+    <div id="historyBox">
+      <h4>これまでの訪問</h4>
+      <div class="hist" id="histList"></div>
+      <h4>写真</h4>
+      <div class="thumbs" id="editPhotos"></div>
+    </div>
     <div class="foot">
       <button class="btn plain" data-close>キャンセル</button>
       <button class="btn" id="save">保存する</button>
@@ -245,8 +322,18 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 <!-- 設定 -->
 <div class="modal" id="settings" role="dialog" aria-modal="true">
   <div class="sheet">
-    <h3>同期の設定<button class="x" data-close>×</button></h3>
-    <div class="note" style="margin-top:2px">Googleスプレッドシートに記録を保存し、スマホ・タブレット・PCで共有します。設定方法は手順書を見てください。</div>
+    <h3>設定<button class="x" data-close>×</button></h3>
+    <h4>この端末での動作</h4>
+    <div class="checks" style="flex-direction:column;margin-top:4px">
+      <label><input type="checkbox" id="pAuto"> 開いたら自動で現在地の近くを探す</label>
+      <label><input type="checkbox" id="pTime"> 時間帯に合わせておすすめを調整（朝はカフェ、夜は居酒屋など）</label>
+    </div>
+    <h4>保存した場所</h4>
+    <div id="savedList" class="hist"></div>
+    <h4>店舗データ</h4>
+    <div class="note" id="srcInfo" style="margin-top:0"></div>
+    <h4>同期（スプレッドシート）</h4>
+    <div class="note" style="margin-top:0">Googleスプレッドシートに記録を保存し、スマホ・タブレット・PCで共有します。</div>
     <label class="label" for="sUrl">ウェブアプリのURL</label>
     <input class="input" id="sUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" inputmode="url">
     <label class="label" for="sTok">合言葉</label>
@@ -255,16 +342,27 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <div class="foot"><button class="btn plain" id="sOff">同期をやめる</button><button class="btn" id="sSave">接続して保存</button></div>
     <div id="shareBox" style="display:none">
       <label class="label">ほかの端末を設定するリンク</label>
-      <div class="note" style="margin-top:0">このリンクを自分のタブレット・PCで開くだけで設定が完了します。合言葉が入っているので他人に送らないでください。</div>
+      <div class="note" style="margin-top:0">自分のタブレット・PCで開くだけで設定が完了します。合言葉が入っているので他人に送らないでください。</div>
       <div class="row" style="margin-top:8px"><input class="input" id="shareUrl" readonly style="font-size:12px;flex:3"><button class="btn sm" id="shareCopy" style="flex:1">コピー</button></div>
     </div>
     <div class="foot"><button class="btn ghost" id="syncNow">↻ 今すぐ同期</button></div>
   </div>
 </div>
 
+<!-- 場所の保存 -->
+<div class="modal" id="placeModal" role="dialog" aria-modal="true">
+  <div class="sheet" style="max-width:420px">
+    <h3>この場所を保存<button class="x" data-close>×</button></h3>
+    <div class="note" style="margin-top:0">「さがす」の上にボタンとして並び、ワンタップでこの場所の周辺を探せます。</div>
+    <label class="label" for="plName">名前</label>
+    <input class="input" id="plName" autocomplete="off" placeholder="例：会社の近く、実家">
+    <div class="foot"><button class="btn plain" data-close>やめる</button><button class="btn" id="plSave">保存</button></div>
+  </div>
+</div>
+
 <div class="modal" id="confirm" role="dialog" aria-modal="true">
   <div class="sheet" style="max-width:420px">
-    <h3>削除しますか？</h3>
+    <h3 id="cTitle">削除しますか？</h3>
     <p id="cText" style="font-size:14px;color:var(--sub)"></p>
     <div class="foot"><button class="btn plain" data-close>やめる</button><button class="btn danger" id="cOk">削除</button></div>
   </div>
@@ -276,13 +374,15 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 const $ = s => document.querySelector(s);
 const GENRES = ["ラーメン","居酒屋・バー","カフェ","焼肉","寿司","中華","そば・うどん","カレー","定食・和食","イタリアン","レストラン","ファストフード"];
 const STAR_TXT = ["タップして選択（あとで変更できます）","★1 いまいち","★2 ふつう以下","★3 ふつう","★4 また行きたい","★5 最高！"];
-const K = {cfg:"gn-cfg", cache:"gn-cache", pend:"gn-pending"};
+const K = {cfg:"gn-cfg", cache:"gn-cache", pend:"gn-pending", prefs:"gn-prefs", settings:"gn-settings", shop:"gn-shopcache"};
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+const DAY = 86400000;
 
 const S = {
-  cfg:null, visits:[], pending:[], syncState:"local", syncing:false,
-  genre:"すべて", filterGenre:"すべて", pos:null, placeLabel:"", shops:null, searching:false, searchErr:"",
-  editing:null, fRating:0, fExtra:{}, pickShops:null, shown:30
+  cfg:null, visits:[], pending:[], syncState:"local", syncing:false, serverVer:0, placesOn:null,
+  settings:{savedPlaces:[]}, prefs:{autoSearch:true, timeAdjust:true},
+  genre:"すべて", filterGenre:"すべて", onlyUnrated:false, pos:null, placeLabel:"", shops:null, src:"", searching:false, searchErr:"", timing:"", shown:30,
+  mode:"new", editing:null, fRating:0, fExtra:{}, newPhotos:[], pickShops:null, photoCache:{}, openPhotos:{}, rightView:"visits"
 };
 
 /* ---------- helpers ---------- */
@@ -293,23 +393,31 @@ const el = (tag, attrs={}, ...kids) => {
     else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
     else if (v!==undefined && v!==null && v!==false) e.setAttribute(k, v);
   }
-  for (const c of kids.flat()) if (c!==null && c!==undefined && c!==false) e.append(c.nodeType?c:String(c));
+  for (const c of kids.flat()) if (c!==null && c!==undefined && c!==false && c!=="") e.append(c.nodeType?c:String(c));
   return e;
 };
 const ls = {get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}, del(k){try{localStorage.removeItem(k)}catch(e){}}};
-const today = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
-const nid = () => "v_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const toast = m => { const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on"),2400); };
+const ymd = d => new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+const today = () => ymd(new Date());
+const nid = p => (p||"v_")+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const toast = m => { const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove("on"),2600); };
 const safeUrl = u => /^https?:\/\//i.test(u||"") ? u : "";
 const mapsSearch = q => "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(q);
+function routeUrl(s){
+  let u = "https://www.google.com/maps/dir/?api=1&travelmode=walking&destination=";
+  if (s.lat!=null && s.lng!=null) u += encodeURIComponent(`${s.lat},${s.lng}`); else u += encodeURIComponent(s.name+" "+(s.area||s.addr||""));
+  if (s.pid || s.placeId) u += "&destination_place_id="+encodeURIComponent(s.pid||s.placeId);
+  return u;
+}
 function distM(a,b,c,d){ const R=6371000, r=x=>x*Math.PI/180; const dl=r(c-a), dn=r(d-b);
   const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 const fmtDist = m => m<1000 ? `${Math.round(m/10)*10}m` : `${(m/1000).toFixed(1)}km`;
 const walkMin = m => Math.max(1, Math.round(m/80));
 const norm = s => (s||"").replace(/[\s　・\-‐ー（）()]/g,"").toLowerCase();
+const daysAgo = d => d ? Math.floor((new Date(today()) - new Date(d))/DAY) : null;
+const fmtDate = d => d ? d.replace(/-/g,"/") : "";
 async function fetchT(url, opts={}, ms=25000){ const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms);
   try { return await fetch(url,{...opts,signal:c.signal}); } finally { clearTimeout(t); } }
-
 function starsEl(value, onPick, cls=""){
   const box = el("div",{class:"stars "+cls});
   for (let i=1;i<=5;i++) box.append(el("button",{type:"button",class:i<=value?"on":"","aria-label":"★"+i,
@@ -332,11 +440,11 @@ const NAME_RULES = [
   [/マクドナルド|モスバーガー|ケンタッキー|バーガー|フレッシュネス|ロッテリア|サブウェイ/, "ファストフード"]
 ];
 const CUISINE_RULES = [
-  [/ramen|noodle/, "ラーメン"], [/izakaya|yakitori/, "居酒屋・バー"], [/coffee|cafe/, "カフェ"],
+  [/ramen|noodle/, "ラーメン"], [/izakaya|yakitori|bar\b|pub|wine_bar|_bar$/, "居酒屋・バー"], [/coffee|cafe|tea_house|bakery/, "カフェ"],
   [/yakiniku|barbecue|korean/, "焼肉"], [/sushi/, "寿司"], [/chinese|dumpling/, "中華"],
   [/soba|udon/, "そば・うどん"], [/curry|indian|nepal/, "カレー"],
   [/japanese|teishoku|tonkatsu|donburi|gyudon|tempura|seafood|katsu/, "定食・和食"],
-  [/italian|pizza|pasta/, "イタリアン"], [/burger|chicken|sandwich/, "ファストフード"]
+  [/italian|pizza|pasta/, "イタリアン"], [/burger|chicken|sandwich|fast_food/, "ファストフード"]
 ];
 function detectGenre(tags={}, name=""){
   for (const [re,g] of NAME_RULES) if (re.test(name)) return g;
@@ -348,8 +456,95 @@ function detectGenre(tags={}, name=""){
   if (a==="fast_food") return "ファストフード";
   return "レストラン";
 }
+function detectGenreG(p){
+  for (const [re,g] of NAME_RULES) if (re.test(p.name)) return g;
+  for (const t of [p.type, ...(p.types||[])]) { if (!t || t==="restaurant" || t==="food" || t==="point_of_interest" || t==="establishment") continue;
+    for (const [re,g] of CUISINE_RULES) if (re.test(t)) return g; }
+  if ((p.types||[]).includes("cafe")) return "カフェ";
+  if ((p.types||[]).includes("bar")) return "居酒屋・バー";
+  return "レストラン";
+}
 
-/* ---------- sync with Google Sheets (Apps Script) ---------- */
+/* ---------- opening hours ---------- */
+const DN = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+function ohDayMatch(part, d){
+  return part.split(",").some(tok=>{
+    tok = tok.trim(); if (tok==="PH" || !tok) return false;
+    const m = tok.match(/^(Mo|Tu|We|Th|Fr|Sa|Su)(?:-(Mo|Tu|We|Th|Fr|Sa|Su))?$/); if (!m) throw 0;
+    const a = DN.indexOf(m[1]), b = m[2] ? DN.indexOf(m[2]) : a;
+    return a<=b ? (d>=a && d<=b) : (d>=a || d<=b);
+  });
+}
+function ohTimes(str){
+  return str.split(",").map(x=>{
+    const m = x.trim().match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})\+?$/); if (!m) throw 0;
+    const s = +m[1]*60 + +m[2]; let e = +m[3]*60 + +m[4]; if (e<=s) e += 1440; return [s,e];
+  });
+}
+function ohDay(rules, d){
+  let res = null;
+  for (const r of rules) {
+    const m = r.match(/^((?:(?:Mo|Tu|We|Th|Fr|Sa|Su|PH)(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?,?)+)?\s*(.*)$/);
+    const days = m[1], t = (m[2]||"").trim();
+    if (days && !ohDayMatch(days.replace(/,$/,""), d)) continue;
+    if (!t) continue;
+    if (/^(off|closed)$/i.test(t)) { res = []; continue; }
+    res = ohTimes(t);
+  }
+  return res || [];
+}
+function ohStatus(str, now=new Date()){
+  if (!str) return null;
+  str = str.trim();
+  if (str==="24/7") return {k:"open", t:"24時間営業"};
+  try {
+    const rules = str.split(";").map(s=>s.trim()).filter(Boolean);
+    const d = now.getDay(), t = now.getHours()*60+now.getMinutes();
+    const tdy = ohDay(rules, d), ydy = ohDay(rules, (d+6)%7);
+    for (const [s,e] of ydy) if (e>1440 && t < e-1440) return closeSt(e-1440-t);
+    for (const [s,e] of tdy) if (t>=s && t<e) return closeSt(e-t);
+    const next = tdy.map(x=>x[0]).filter(s=>s>t).sort((a,b)=>a-b)[0];
+    return {k:"closed", t: next!=null ? `準備中・${String(Math.floor(next/60)).padStart(2,"0")}:${String(next%60).padStart(2,"0")}から` : "本日の営業は終了"};
+  } catch(e){ return null; }
+}
+function closeSt(mins){ return mins<=45 ? {k:"closing", t:`あと${Math.max(1,Math.round(mins))}分で閉店`} : {k:"open", t:"営業中"}; }
+function hhmm(iso){ const d=new Date(iso); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
+function shopStatus(s){
+  if (s.src==="google") {
+    if (s.open===true) return s.nextClose ? closeSt((Date.parse(s.nextClose)-Date.now())/60000) : {k:"open",t:"営業中"};
+    if (s.open===false) {
+      if (s.nextOpen) { const ms = Date.parse(s.nextOpen)-Date.now(); if (ms < DAY) return {k:"closed", t:`準備中・${hhmm(s.nextOpen)}から`}; }
+      return {k:"closed", t:"営業時間外"};
+    }
+    return null;
+  }
+  return ohStatus(s.hours);
+}
+const PRICE = {PRICE_LEVEL_FREE:"無料",PRICE_LEVEL_INEXPENSIVE:"¥",PRICE_LEVEL_MODERATE:"¥¥",PRICE_LEVEL_EXPENSIVE:"¥¥¥",PRICE_LEVEL_VERY_EXPENSIVE:"¥¥¥¥"};
+
+/* ---------- visits model ---------- */
+function normalizeVisit(v){
+  let log = [];
+  try { log = typeof v.log==="string" ? (v.log ? JSON.parse(v.log) : []) : (Array.isArray(v.log) ? v.log : []); } catch(e){ log = []; }
+  log = log.filter(x=>x && typeof x==="object").map(x=>({id:x.id||nid("l_"), d:x.d||"", r:Number(x.r)||0, m:x.m||""}));
+  if (!log.length && (v.date || Number(v.rating))) log = [{id:"l0", d:v.date||"", r:Number(v.rating)||0, m:v.memo||""}];
+  log.sort((a,b)=>(a.d||"").localeCompare(b.d||""));
+  const rated = log.filter(x=>x.r>0);
+  const last = log[log.length-1] || {};
+  return {...v, log, rating:Number(last.r ?? v.rating)||0, date:last.d||v.date||"", memo:last.m ?? v.memo ?? "",
+    lat: v.lat===""||v.lat==null ? null : Number(v.lat), lng: v.lng===""||v.lng==null ? null : Number(v.lng),
+    photoCount:Number(v.photoCount)||0, createdAt:Number(v.createdAt)||0, updatedAt:Number(v.updatedAt)||0,
+    count: log.length || 1, avg: rated.length ? rated.reduce((s,x)=>s+x.r,0)/rated.length : 0};
+}
+function cleanVisit(v){
+  const log = (v.log||[]).slice().sort((a,b)=>(a.d||"").localeCompare(b.d||""));
+  const last = log[log.length-1] || {d:"",r:0,m:""};
+  return {id:v.id, name:v.name, genre:v.genre||"", area:v.area||"", date:last.d||"", rating:Number(last.r)||0, memo:last.m||"",
+    url:v.url||"", lat:v.lat??"", lng:v.lng??"", osmId:v.osmId||"", placeId:v.placeId||"", log,
+    createdAt:v.createdAt||Date.now(), updatedAt:Date.now()};
+}
+
+/* ---------- sync ---------- */
 function setSync(state){
   S.syncState = state;
   const dot=$("#syncDot"), txt=$("#syncTxt"); dot.className="dot";
@@ -360,37 +555,43 @@ function setSync(state){
   else if (state==="error") { dot.classList.add("off"); txt.textContent = n ? `オフライン・未送信 ${n}件` : "同期できません"; }
   else if (state==="auth") { dot.classList.add("off"); txt.textContent="合言葉が違います"; }
 }
-function saveLocal(){ ls.set(K.cache, S.visits); ls.set(K.pend, S.pending); }
+function saveLocal(){ ls.set(K.cache, S.visits.map(cleanVisitKeepCount)); ls.set(K.pend, S.pending); }
+function cleanVisitKeepCount(v){ return {...cleanVisit(v), photoCount:v.photoCount||0, updatedAt:v.updatedAt||0}; }
 function applyOp(list, op){
-  if (op.action==="upsert") { const i=list.findIndex(v=>v.id===op.visit.id); if(i>=0) list[i]={...op.visit}; else list.push({...op.visit}); }
-  else if (op.action==="delete") return list.filter(v=>v.id!==op.id);
+  if (op.action==="upsert") { const nv = normalizeVisit(op.visit); const i=list.findIndex(v=>v.id===nv.id);
+    if (i>=0) list[i]={...nv, photoCount: list[i].photoCount}; else list.push(nv); return list; }
+  if (op.action==="delete") return list.filter(v=>v.id!==op.id);
   return list;
 }
-function normalizeVisits(arr){
-  return (arr||[]).filter(v=>v&&v.id&&v.name).map(v=>({...v, rating:Number(v.rating)||0,
-    lat: v.lat===""||v.lat==null ? null : Number(v.lat), lng: v.lng===""||v.lng==null ? null : Number(v.lng),
-    createdAt:Number(v.createdAt)||0, updatedAt:Number(v.updatedAt)||0}));
-}
 function serverMerge(serverVisits){
-  let list = normalizeVisits(serverVisits);
-  for (const op of S.pending) list = applyOp(list, op) || list;
-  S.visits = list; saveLocal(); renderVisits(); renderResults();
+  let list = (serverVisits||[]).filter(v=>v&&v.id&&v.name).map(normalizeVisit);
+  for (const op of S.pending) list = applyOp(list, op);
+  S.visits = list; saveLocal(); renderAll();
 }
 async function api(method, body){
   const url = S.cfg.url;
   let r;
-  if (method==="GET") r = await fetchT(url+(url.includes("?")?"&":"?")+"token="+encodeURIComponent(S.cfg.token)+"&_="+Date.now());
-  else r = await fetchT(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({...body, token:S.cfg.token})});
+  if (method==="GET") r = await fetchT(url+(url.includes("?")?"&":"?")+"token="+encodeURIComponent(S.cfg.token)+"&_="+Date.now(), {}, 30000);
+  else r = await fetchT(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({...body, token:S.cfg.token})}, 60000);
   if (!r.ok) throw {code:"http"};
   const j = await r.json();
-  if (!j.ok) throw {code: j.error==="auth" ? "auth" : "server", msg:j.error};
+  if (!j.ok) throw {code: j.error==="auth" ? "auth" : "server", msg:j.error, detail:j.detail};
   return j;
 }
 async function pull(){
-  if (!S.cfg) { setSync("local"); return; }
+  if (!S.cfg) { setSync("local"); renderBanner(); return; }
   setSync("syncing");
-  try { await flush(true); const j = await api("GET"); serverMerge(j.visits); setSync("ok"); }
-  catch(e){ setSync(e.code==="auth"?"auth":"error"); }
+  try {
+    await flush(true);
+    const j = await api("GET");
+    S.serverVer = Number(j.ver)||1;
+    if (S.serverVer >= 2) {
+      S.placesOn = !!j.places;
+      if (j.settings && typeof j.settings==="object") { S.settings = {savedPlaces:[], ...j.settings}; ls.set(K.settings, S.settings); renderSaved(); }
+    }
+    serverMerge(j.visits); setSync("ok");
+  } catch(e){ setSync(e.code==="auth"?"auth":"error"); }
+  renderBanner(); renderAttr();
 }
 async function flush(silent){
   if (!S.cfg || S.syncing) return;
@@ -400,25 +601,39 @@ async function flush(silent){
       const op = S.pending[0];
       const j = await api("POST", op);
       S.pending.shift(); saveLocal();
-      if (!S.pending.length) serverMerge(j.visits);
+      if (!S.pending.length && j.visits) serverMerge(j.visits);
     }
     if (!silent) setSync("ok");
   } catch(e){ setSync(e.code==="auth"?"auth":"error"); if (silent) throw e; }
   finally { S.syncing = false; }
 }
 function commit(op){
-  S.visits = applyOp(S.visits, op) || S.visits;
+  S.visits = applyOp(S.visits, op);
   if (S.cfg) S.pending.push(op);
-  saveLocal(); renderVisits(); renderResults();
+  saveLocal(); renderAll();
   if (S.cfg) { setSync(S.syncState==="ok"?"ok":S.syncState); flush(false); }
 }
-function cleanVisit(v){
-  return {id:v.id, name:v.name, genre:v.genre||"", area:v.area||"", date:v.date||"", rating:Number(v.rating)||0, memo:v.memo||"",
-    url:v.url||"", lat:v.lat??"", lng:v.lng??"", osmId:v.osmId||"", createdAt:v.createdAt||Date.now(), updatedAt:Date.now()};
+function renderBanner(){
+  const b=$("#verBanner"); b.textContent="";
+  if (S.cfg && S.serverVer===1) b.append(el("div",{class:"banner"},"スプレッドシート側（Code.gs）を最新版に更新すると、訪問履歴・写真・Googleマップ検索・保存した場所の同期が使えるようになります。更新するまで、訪問履歴は最新の1回分だけ保存されます。"));
 }
 
+/* ---------- settings (saved places) & prefs ---------- */
+async function saveSettings(){
+  ls.set(K.settings, S.settings); renderSaved();
+  if (S.cfg && S.serverVer>=2) { try { await api("POST", {action:"settingsSet", settings:S.settings}); } catch(e){ toast("保存した場所の同期に失敗しました（この端末には保存済み）"); } }
+}
+function renderSaved(){
+  const box=$("#savedChips"); box.textContent="";
+  (S.settings.savedPlaces||[]).forEach(p=>box.append(el("button",{class:"chip sm",type:"button",onclick:()=>searchAt({lat:p.lat,lng:p.lng}, p.n)},"⭐ "+p.n)));
+  const list=$("#savedList"); list.textContent="";
+  if (!(S.settings.savedPlaces||[]).length) list.append(el("div",{class:"note",style:"margin:0"},"まだありません。検索した場所の「📌 この場所を保存」から追加できます。"));
+  (S.settings.savedPlaces||[]).forEach(p=>list.append(el("div",{class:"h"}, el("b",{},p.n), el("span",{class:"m"},""),
+    el("button",{class:"iconbtn",onclick:()=>{ S.settings.savedPlaces=S.settings.savedPlaces.filter(x=>x.id!==p.id); saveSettings(); }},"削除"))));
+}
+function savePrefs(){ ls.set(K.prefs, S.prefs); }
+
 /* ---------- location & shops ---------- */
-const SHOP_CACHE_KEY = "gn-shopcache", SHOP_CACHE_MS = 15*60*1000;
 function geoOnce(opts){
   return new Promise((res,rej)=>{
     if (!navigator.geolocation) return rej({code:"nogeo"});
@@ -426,7 +641,6 @@ function geoOnce(opts){
       e=>rej({code: e.code===1 ? "denied" : "fail"}), opts);
   });
 }
-// まず速い測位（Wi-Fi・基地局、直近2分のキャッシュ可）→ だめなときだけGPSの高精度測位
 async function getPosition(){
   try { return await geoOnce({enableHighAccuracy:false, timeout:5000, maximumAge:120000}); }
   catch(e){ if (e.code==="denied"||e.code==="nogeo") throw e; }
@@ -446,23 +660,12 @@ async function geocode(q){
   const j = await r.json(); if (!j.length) throw {code:"notfound"};
   return {lat:Number(j[0].lat), lng:Number(j[0].lon), label:q};
 }
-function parseShops(j, lat, lng){
-  const seen = new Set();
-  return (j.elements||[]).map(e=>{
-    const t=e.tags||{}, la=e.lat??e.center?.lat, ln=e.lon??e.center?.lon;
-    if (la==null||ln==null) return null;
-    const name = t["name:ja"]||t.name;
-    const addr = [t["addr:city"], t["addr:quarter"]||t["addr:suburb"], t["addr:neighbourhood"]].filter(Boolean).join("");
-    return {osmId:e.type[0]+e.id, name, genre:detectGenre(t,name), lat:la, lng:ln, hours:t.opening_hours||"", addr, cuisine:t.cuisine||""};
-  }).filter(s=>{ if(!s) return false; const k=norm(s.name)+Math.round(s.lat*2000)+Math.round(s.lng*2000); if(seen.has(k)) return false; seen.add(k); return true; });
-}
-// 3つのサーバーに時間差で問い合わせ、最初に返ってきた結果を使う（遅いサーバーを待ち続けない）
 function overpassRace(q){
   return new Promise((resolve,reject)=>{
     const ctrls=[]; let done=false, failed=0, started=0; const timers=[];
     const finish=()=>{ done=true; timers.forEach(clearTimeout); ctrls.forEach(c=>c.abort()); };
     const start=i=>{
-      if (done || i>=OVERPASS.length) return;
+      if (done || i>=OVERPASS.length || i<started) return;
       started++; const c=new AbortController(); ctrls.push(c);
       const t=setTimeout(()=>c.abort(), 15000);
       fetch(OVERPASS[i], {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q), signal:c.signal})
@@ -470,56 +673,80 @@ function overpassRace(q){
         .then(j=>{ clearTimeout(t); if(done) return; finish(); resolve({j, ep:new URL(OVERPASS[i]).host}); })
         .catch(()=>{ clearTimeout(t); if(done) return; failed++;
           if (failed>=OVERPASS.length) { finish(); reject(new Error("overpass")); }
-          else if (started===failed) start(started); });   // 失敗したらすぐ次へ
+          else if (started===failed) start(started); });
     };
     start(0);
-    timers.push(setTimeout(()=>start(1), 2500));   // 2.5秒で返らなければ2台目も
-    timers.push(setTimeout(()=>start(2), 5000));   // 5秒で3台目も
+    timers.push(setTimeout(()=>start(1), 2500));
+    timers.push(setTimeout(()=>start(2), 5000));
   });
 }
-async function fetchShops(lat,lng,radius){
-  // 同じ場所（約100m以内）・同じ範囲なら15分間は保存済みの結果を即表示
+function parseOsm(j){
+  const seen = new Set();
+  return (j.elements||[]).map(e=>{
+    const t=e.tags||{}, la=e.lat??e.center?.lat, ln=e.lon??e.center?.lon;
+    if (la==null||ln==null) return null;
+    const name = t["name:ja"]||t.name;
+    const addr = [t["addr:city"], t["addr:quarter"]||t["addr:suburb"], t["addr:neighbourhood"]].filter(Boolean).join("");
+    return {src:"osm", osmId:e.type[0]+e.id, name, genre:detectGenre(t,name), lat:la, lng:ln, hours:t.opening_hours||"", addr};
+  }).filter(s=>{ if(!s||!s.name) return false; const k=norm(s.name)+Math.round(s.lat*2000)+Math.round(s.lng*2000); if(seen.has(k)) return false; seen.add(k); return true; });
+}
+async function fetchOsm(lat,lng,radius){
   const key = `${lat.toFixed(3)},${lng.toFixed(3)},${radius}`;
-  const cache = ls.get(SHOP_CACHE_KEY, {});
+  const cache = ls.get(K.shop, {});
   let raw, src;
-  if (cache[key] && Date.now()-cache[key].t < SHOP_CACHE_MS) { raw = cache[key].j; src = "保存済み"; }
+  if (cache[key] && Date.now()-cache[key].t < 15*60000) { raw = cache[key].j; src = "保存済み"; }
   else {
     const q = `[out:json][timeout:12];nwr(around:${radius},${lat},${lng})["amenity"~"^(restaurant|fast_food|cafe|pub|bar|food_court|biergarten)$"]["name"];out center qt 300;`;
     const r = await overpassRace(q); raw = r.j; src = r.ep;
     const slim = {elements:(raw.elements||[]).map(e=>({type:e.type,id:e.id,lat:e.lat,lon:e.lon,center:e.center,tags:e.tags}))};
-    const next = {}; for (const [k,v] of Object.entries(cache)) if (Date.now()-v.t < SHOP_CACHE_MS) next[k]=v;
-    next[key] = {t:Date.now(), j:slim}; ls.set(SHOP_CACHE_KEY, next);
+    const next = {}; for (const [k,v] of Object.entries(cache)) if (Date.now()-v.t < 15*60000) next[k]=v;
+    next[key] = {t:Date.now(), j:slim}; ls.set(K.shop, next);
   }
-  const shops = parseShops(raw, lat, lng).map(s=>({...s, dist:distM(lat,lng,s.lat,s.lng)}));
-  shops.src = src;
-  return shops;
+  return {shops: parseOsm(raw), src:"osm", label:src};
+}
+async function fetchGoogle(lat,lng,radius){
+  const j = await api("POST", {action:"nearby", lat, lng, radius});
+  const di = (new Date().getDay()+6)%7;
+  const shops = (j.places||[]).map(p=>({src:"google", pid:p.pid, name:p.name, genre:detectGenreG(p), lat:p.lat, lng:p.lng,
+    rating:p.rating, n:p.n, price:PRICE[p.price]||"", open:p.open, nextClose:p.nextClose, nextOpen:p.nextOpen,
+    hours:(p.hours&&p.hours[di]||"").replace(/^[^:：]+[:：]\s*/,""), kids:p.kids, addr:p.addr, uri:p.uri}));
+  return {shops, src:"google", label:"Googleマップ", used:j.used};
+}
+async function fetchShops(lat,lng,radius){
+  if (S.cfg && S.serverVer>=2 && S.placesOn) {
+    try { return await fetchGoogle(lat,lng,radius); }
+    catch(e){
+      if (e.msg==="no_places_key") S.placesOn=false;
+      else if (e.msg==="daily_limit") toast("今日のGoogle検索の上限（30回）に達したため、地図データ（OSM）で探します");
+      else toast("Google検索に失敗したため、地図データ（OSM）で探します");
+    }
+  }
+  return await fetchOsm(lat,lng,radius);
 }
 async function searchAt(pos, label, geoMs){
   S.pos = pos; S.searching = true; S.searchErr = ""; S.shops = null; S.shown = 30; S.timing = "";
-  renderWhere(label||S.placeLabel||"現在地"); renderResults();
-  if (!label) reverseLabel(pos.lat,pos.lng).then(l=>{ if (S.pos===pos) { S.placeLabel = l; renderWhere(l || "現在地"); } });
-  else S.placeLabel = label;
+  S.placeLabel = label || "";
+  renderWhere(); renderResults();
+  if (!label) reverseLabel(pos.lat,pos.lng).then(l=>{ if (S.pos===pos) { S.placeLabel = l; renderWhere(); } });
   const t0 = performance.now();
   try {
-    const shops = await fetchShops(pos.lat,pos.lng,Number($("#radius").value));
-    S.shops = shops;
-    S.timing = (geoMs!=null ? `位置 ${(geoMs/1000).toFixed(1)}秒・` : "") + `検索 ${((performance.now()-t0)/1000).toFixed(1)}秒（${shops.src}）`;
+    const r = await fetchShops(pos.lat,pos.lng,Number($("#radius").value));
+    if (S.pos!==pos) return;
+    S.shops = r.shops.map(s=>({...s, dist:distM(pos.lat,pos.lng,s.lat,s.lng)}));
+    S.src = r.src;
+    S.timing = (geoMs!=null ? `位置 ${(geoMs/1000).toFixed(1)}秒・` : "") + `検索 ${((performance.now()-t0)/1000).toFixed(1)}秒（${r.label}）`;
   } catch(e){ S.searchErr = "お店のデータを取得できませんでした。地図データのサーバーが混み合っている可能性があります。少し時間をおいて「再検索」してください。"; }
   S.searching = false;
-  renderWhere(S.placeLabel || label || "現在地"); renderResults();
+  renderWhere(); renderResults(); renderAttr(); renderVisits();
 }
 async function locate(){
-  const b = $("#locate"); b.disabled = true; b.textContent = "📍 位置を確認中…";
+  const b = $("#locate"); if (b.disabled) return; b.disabled = true; b.textContent = "📍 位置を確認中…";
   const t0 = performance.now();
-  try {
-    const p = await getPosition();
-    b.textContent = "🔍 お店を検索中…";
-    await searchAt(p, "", performance.now()-t0);
-  }
+  try { const p = await getPosition(); b.textContent = "🔍 お店を検索中…"; await searchAt(p, "", performance.now()-t0); }
   catch(e){
-    const msg = e.code==="denied" ? "位置情報の利用が許可されていません。ブラウザ（iPhoneは設定→プライバシー→位置情報サービス→Safari）で許可するか、下の「場所を入力して探す」を使ってください。"
+    S.searchErr = e.code==="denied" ? "位置情報の利用が許可されていません。ブラウザ（iPhoneは設定→プライバシー→位置情報サービス→Safari）で許可するか、下の「場所を入力して探す」を使ってください。"
       : "位置を取得できませんでした。屋外で再度お試しいただくか、下の「場所を入力して探す」を使ってください。";
-    S.searchErr = msg; S.shops = null; renderResults(); $("#altBox").open = true;
+    S.shops = null; renderResults(); $("#altBox").open = true;
   } finally { b.disabled = false; b.textContent = "📍 現在地の近くを探す"; }
 }
 async function placeSearch(){
@@ -531,32 +758,55 @@ async function placeSearch(){
 /* ---------- recommendation ---------- */
 function prefs(){
   const g = {}; let tot=0, n=0;
-  for (const v of S.visits) if (v.rating) { (g[v.genre||"?"] ||= []).push(v.rating); tot+=v.rating; n++; }
+  for (const v of S.visits) for (const x of v.log) if (x.r) { (g[v.genre||"?"] ||= []).push(x.r); tot+=x.r; n++; }
   const base = n ? tot/n : 3; const out = {};
   for (const [k,a] of Object.entries(g)) { const avg=a.reduce((s,x)=>s+x,0)/a.length; out[k]={avg, n:a.length, w:(avg-base)*Math.min(1,a.length/3)}; }
   return out;
 }
+function timeBoost(genre){
+  if (!S.prefs.timeAdjust) return null;
+  const h = new Date().getHours()+new Date().getMinutes()/60;
+  const T = h>=5&&h<10.5 ? {lbl:"朝", g:{"カフェ":.6,"ファストフード":.3,"定食・和食":.2}}
+    : h<14.5 ? {lbl:"お昼", g:{"定食・和食":.4,"ラーメン":.4,"そば・うどん":.4,"カレー":.3,"中華":.3}}
+    : h<17 ? {lbl:"午後", g:{"カフェ":.5}}
+    : h<23 ? {lbl:"夜", g:{"居酒屋・バー":.5,"焼肉":.4,"寿司":.3,"イタリアン":.3,"中華":.2}}
+    : {lbl:"深夜", g:{"ラーメン":.5,"居酒屋・バー":.3,"ファストフード":.3}};
+  const w = T.g[genre]; return w ? {w, lbl:T.lbl} : null;
+}
 function findVisit(s){
-  return S.visits.find(v => (s.osmId && v.osmId===s.osmId) ||
-    (norm(v.name)===norm(s.name) && (v.lat==null || distM(v.lat,v.lng,s.lat,s.lng) < 150)));
+  return S.visits.find(v => (s.pid && v.placeId===s.pid) || (s.osmId && v.osmId===s.osmId) ||
+    (norm(v.name)===norm(s.name) && (v.lat==null || s.lat==null || distM(v.lat,v.lng,s.lat,s.lng) < 150)));
 }
 function scored(){
   const P = prefs(); const R = Number($("#radius").value);
   return S.shops.map(s=>{
-    const v = findVisit(s); const why=[]; let sc = 0;
+    const v = findVisit(s); const why=[]; let sc = 0; const st = shopStatus(s);
     sc -= (s.dist/R)*1.5;
     const p = P[s.genre];
     if (p && p.w > 0.15) { sc += p.w*1.2; why.push({t:`好きなジャンル（${s.genre} 平均★${p.avg.toFixed(1)}）`}); }
     else if (p && p.w < -0.3) { sc += p.w; why.push({t:`${s.genre}は評価低め`, neg:true}); }
     if (v) {
-      if (v.rating>=5) { sc += 1.2; why.push({t:"前回★5・また行きたい"}); }
-      else if (v.rating===4) { sc += 0.5; why.push({t:"前回★4"}); }
-      else if (v.rating && v.rating<=2) { sc -= 3; why.push({t:`前回★${v.rating}`, neg:true}); }
-      else { sc -= 0.4; why.push({t:"行ったことあり", neg:true}); }
+      const a = v.avg || v.rating;
+      const ago = daysAgo(v.date);
+      if (a>=4.5) { sc += 1.2; why.push({t:`平均★${a.toFixed(1)}・また行きたい`}); }
+      else if (a>=4) { sc += 0.5; why.push({t:`平均★${a.toFixed(1)}`}); }
+      else if (a && a<=2) { sc -= 3; why.push({t:`前回★${v.rating}`, neg:true}); }
+      else { sc -= 0.4; why.push({t:`${v.count}回行った`, neg:true}); }
+      if (a>=4 && ago!=null && ago>=30) { sc += 0.3; why.push({t:`${ago}日ぶり`}); }
     } else { sc += 0.4; why.push({t:"まだ行ったことがない"}); }
-    if (s.hours) sc += 0.1;
-    return {...s, v, sc, why};
+    if (s.rating && s.n>=5) { sc += (s.rating-3.6)*0.9*Math.min(1,s.n/50); if (s.rating>=4 && s.n>=20) why.push({t:`Google★${s.rating.toFixed(1)}`}); }
+    if (st) { if (st.k==="closed") sc -= 2.5; else if (st.k==="closing") sc -= 0.4; else sc += 0.2; }
+    const tb = timeBoost(s.genre); if (tb) { sc += tb.w; why.push({t:`${tb.lbl}に合う`}); }
+    return {...s, v, sc, why, st};
   });
+}
+function heroReason(s){
+  const parts = [];
+  const pos = s.why.filter(x=>!x.neg).map(x=>x.t);
+  if (pos.length) parts.push(pos.slice(0,2).join("・"));
+  parts.push(`徒歩${walkMin(s.dist)}分`);
+  if (s.st) parts.push(s.st.t);
+  return parts.join("・");
 }
 
 /* ---------- render: search ---------- */
@@ -564,83 +814,188 @@ function renderGenres(){
   const box=$("#genres"); box.textContent="";
   ["すべて",...GENRES].forEach(g=>box.append(el("button",{type:"button",class:"chip"+(g===S.genre?" on":""),onclick:()=>{S.genre=g;S.shown=30;renderGenres();renderResults();}},g)));
 }
-function renderWhere(label){
+function renderWhere(){
   const w=$("#where"); w.textContent="";
   if (!S.pos) return;
-  w.append("📍 ", el("b",{}, label), S.pos.acc ? el("span",{style:"color:var(--sub)"}, `（誤差 約${Math.round(S.pos.acc)}m）`) : "",
-    el("a",{href:mapsSearch(`${S.pos.lat},${S.pos.lng}`),target:"_blank",rel:"noopener",style:"font-size:12px"},"地図で確認"),
+  w.append(el("span",{},"📍 ", el("b",{}, S.placeLabel || "現在地"), S.pos.acc ? el("span",{style:"color:var(--sub)"}, `（誤差 約${Math.round(S.pos.acc)}m）`) : ""),
+    el("button",{class:"linkbtn",onclick:openPlaceSave},"📌 この場所を保存"),
     S.timing && el("span",{style:"color:var(--sub);font-size:11px;width:100%"}, "⏱ "+S.timing));
+}
+function shopCard(s, opts={}){
+  const g = s.rating ? el("span",{class:"gr"}, `Google★${s.rating.toFixed(1)}`, el("span",{style:"color:var(--sub);font-weight:400"},`（${s.n}）`)) : null;
+  const mapHref = s.uri || mapsSearch(s.name+" "+(s.addr||S.placeLabel||""));
+  const card = el("div",{class:"card"+(opts.hero?" hero":"")},
+    opts.hero && el("div",{class:"lbl"},"✨ 今日の1軒"),
+    el("div",{class:"top"}, el("div",{class:"name"}, s.name), el("div",{class:"dist"}, `${fmtDist(s.dist)}・徒歩${walkMin(s.dist)}分`)),
+    el("div",{class:"meta"}, s.st && el("span",{class:"st "+s.st.k}, s.st.t), el("span",{},"🍽 "+s.genre), g, s.price && el("span",{},s.price),
+      s.kids===true && el("span",{},"👶 子連れOK"),
+      s.v && el("span",{style:"color:var(--accent-d);font-weight:700"}, `${s.v.count}回・${s.v.avg?("平均★"+s.v.avg.toFixed(1)):"未評価"}`)),
+    opts.hero ? el("div",{class:"reason"}, heroReason(s)) : el("div",{class:"why"}, s.why.map(x=>el("span",{class:x.neg?"neg":""},x.t))),
+    s.hours && el("div",{class:"hours"},"🕒 "+s.hours),
+    el("div",{class:"acts"},
+      el("a",{class:"btn sm plain",href:mapHref,target:"_blank",rel:"noopener"},"🗺 地図"),
+      el("a",{class:"btn sm plain",href:routeUrl(s),target:"_blank",rel:"noopener"},"🚶 経路"),
+      el("button",{class:"btn sm",onclick:()=> s.v ? openModal("revisit", s.v) : openModal("new", {name:s.name,genre:s.genre,lat:s.src==="osm"?s.lat:null,lng:s.src==="osm"?s.lng:null,osmId:s.osmId||"",placeId:s.pid||"",url:s.uri||"",area:s.addr||S.placeLabel||""})}, "✅ 行った"))
+  );
+  return card;
 }
 function renderResults(){
   const w=$("#resultsWrap"); w.textContent="";
   if (S.searching) { w.append(el("div",{class:"loading"},el("div",{class:"spin"}),"近くのお店を探しています…（通常2〜5秒）")); return; }
   if (S.searchErr) { w.append(el("div",{class:"note box",style:"margin-top:14px"},S.searchErr)); return; }
   if (!S.shops) { w.append(el("div",{class:"note",style:"margin:14px 4px"},"「現在地の近くを探す」を押すと、近くのお店を表示します。記録が増えるほど、★の高いジャンルが上に来るようになります。")); return; }
-  let rows = scored();
+  let all = scored();
+  $("#kidsWrap").style.display = all.some(s=>s.kids!=null) ? "" : "none";
+  let rows = all;
   if (S.genre!=="すべて") rows = rows.filter(r=>r.genre===S.genre);
   if ($("#onlyNew").checked) rows = rows.filter(r=>!r.v);
-  rows.sort($("#order").value==="dist" ? (a,b)=>a.dist-b.dist : (a,b)=>b.sc-a.sc);
-  w.append(el("div",{style:"display:flex;justify-content:space-between;align-items:center;margin:16px 2px 0"},
-    el("div",{style:"font-weight:900"}, `${rows.length}件見つかりました`),
+  if ($("#hideClosed").checked) rows = rows.filter(r=>!r.st || r.st.k!=="closed");
+  if ($("#kidsOnly").checked && $("#kidsWrap").style.display==="") rows = rows.filter(r=>r.kids===true);
+  const order = $("#order").value;
+  rows.sort(order==="dist" ? (a,b)=>a.dist-b.dist : order==="google" ? (a,b)=>((b.rating||0)-(a.rating||0))||(a.dist-b.dist) : (a,b)=>b.sc-a.sc);
+
+  w.append(el("div",{class:"sect"}, el("span",{}, `${rows.length}件見つかりました`),
     el("button",{class:"btn sm ghost",onclick:()=>S.pos && searchAt(S.pos, S.placeLabel)},"↻ 再検索")));
-  if (!rows.length) { w.append(el("div",{class:"empty"},"条件に合うお店が見つかりませんでした。範囲を広げるか、ジャンルを「すべて」にしてください。")); return; }
+  if (!rows.length) { w.append(el("div",{class:"empty"},"条件に合うお店が見つかりませんでした。範囲を広げるか、絞り込みを外してください。")); return; }
+
+  // C: 今日の1軒
+  let rest = rows;
+  if (order==="rec") {
+    const hero = rows.find(r=>(!r.st || r.st.k!=="closed") && !(r.v && r.v.avg && r.v.avg<=2));
+    if (hero) { w.append(shopCard(hero,{hero:true})); rest = rows.filter(r=>r!==hero); }
+  }
+  // J: 久しぶりにどう？
+  const again = all.filter(r=>r.v && (r.v.avg||r.v.rating)>=4 && daysAgo(r.v.date)>=30 && (!r.st || r.st.k!=="closed"))
+    .sort((a,b)=>(b.v.avg-a.v.avg)||(a.dist-b.dist)).slice(0,6);
+  if (again.length) {
+    w.append(el("div",{class:"sect"},"🔁 久しぶりにどう？"));
+    const hs = el("div",{class:"hscroll"});
+    again.forEach(s=>hs.append(el("div",{class:"card"},
+      el("div",{class:"name",style:"font-size:15px"}, s.name),
+      el("div",{class:"meta"}, el("span",{class:"gr"},`平均★${(s.v.avg||s.v.rating).toFixed(1)}`), el("span",{},`${daysAgo(s.v.date)}日ぶり`), el("span",{},`徒歩${walkMin(s.dist)}分`), s.st && el("span",{class:"st "+s.st.k},s.st.t)),
+      el("div",{class:"acts"}, el("a",{class:"btn sm plain",href:routeUrl(s),target:"_blank",rel:"noopener"},"🚶 経路"), el("button",{class:"btn sm",onclick:()=>openModal("revisit", s.v)},"✅ 行った")))));
+    w.append(hs);
+  }
+  w.append(el("div",{class:"sect"}, order==="rec" ? "そのほかのおすすめ" : order==="dist" ? "近い順" : "Google評価順"));
   const grid=el("div",{class:"results"});
-  rows.slice(0,S.shown).forEach(s=>{
-    grid.append(el("div",{class:"card"},
-      el("div",{class:"top"}, el("div",{class:"name"}, s.name), el("div",{class:"dist"}, `${fmtDist(s.dist)}・徒歩${walkMin(s.dist)}分`)),
-      el("div",{class:"meta"}, el("span",{},"🍽 "+s.genre), s.v && el("span",{style:"color:var(--accent-d);font-weight:700"}, s.v.rating?`★${s.v.rating}で記録済み`:"記録済み")),
-      el("div",{class:"why"}, s.why.map(x=>el("span",{class:x.neg?"neg":""},x.t))),
-      s.hours && el("div",{class:"hours"},"🕒 "+s.hours),
-      el("div",{class:"acts"},
-        el("a",{class:"btn sm plain",href:mapsSearch(s.name+" "+(s.addr||S.placeLabel||"")),target:"_blank",rel:"noopener"},"🗺 地図・口コミ"),
-        el("button",{class:"btn sm",onclick:()=>openModal(s.v ? {...s.v, date:today()} : {name:s.name,genre:s.genre,lat:s.lat,lng:s.lng,osmId:s.osmId,area:s.addr||S.placeLabel||""}, !!s.v)}, s.v?"✅ また行った":"✅ 行った"))
-    ));
-  });
+  rest.slice(0,S.shown).forEach(s=>grid.append(shopCard(s)));
   w.append(grid);
-  if (rows.length > S.shown) w.append(el("button",{class:"btn ghost",style:"margin-top:12px",onclick:()=>{S.shown+=30;renderResults();}},`もっと見る（残り${rows.length-S.shown}件）`));
-  w.append(el("div",{class:"note"},"営業時間は地図データの登録内容で、最新とは限りません。行く前に「地図・口コミ」で確認してください。"));
+  if (rest.length > S.shown) w.append(el("button",{class:"btn ghost",style:"margin-top:12px",onclick:()=>{S.shown+=30;renderResults();}},`もっと見る（残り${rest.length-S.shown}件）`));
+  w.append(el("div",{class:"note"}, S.src==="google" ? "Googleマップのデータです（1回の検索で最大20件）。営業状況は変わることがあるので、行く前に「地図」で確認してください。" : "営業時間は地図データの登録内容で、最新とは限りません。行く前に「地図」で確認してください。"));
+}
+function renderAttr(){
+  const a=$("#attr"); a.textContent="";
+  if (S.src==="google") a.append("店舗データ：Google Maps　／　地名 © ", el("a",{href:"https://www.openstreetmap.org/copyright",target:"_blank",rel:"noopener"},"OpenStreetMap contributors"));
+  else a.append("店舗データ © ", el("a",{href:"https://www.openstreetmap.org/copyright",target:"_blank",rel:"noopener"},"OpenStreetMap contributors"));
 }
 
 /* ---------- render: visits ---------- */
+async function loadPhotos(v){
+  if (S.photoCache[v.id]) return S.photoCache[v.id];
+  const j = await api("POST",{action:"photos", shopId:v.id});
+  S.photoCache[v.id] = j.photos||[]; return S.photoCache[v.id];
+}
+function photoStrip(v){
+  const box = el("div",{class:"thumbs"}, el("div",{class:"loading",style:"padding:6px"},el("div",{class:"spin"}),"写真を読み込み中…"));
+  loadPhotos(v).then(ps=>{ box.textContent=""; if(!ps.length) box.append(el("span",{class:"note",style:"margin:0"},"写真はありません"));
+    ps.forEach(p=>box.append(el("a",{href:safeUrl(p.driveUrl)||"#",target:"_blank",rel:"noopener",title:p.date}, el("img",{src:p.thumb,alt:v.name+" "+(p.date||""),loading:"lazy"})))); })
+    .catch(()=>{ box.textContent=""; box.append(el("span",{class:"err"},"写真を読み込めませんでした")); });
+  return box;
+}
 function renderVisits(){
   const vs=S.visits;
-  const rated=vs.filter(v=>v.rating>0);
-  const avg = rated.length ? rated.reduce((s,v)=>s+v.rating,0)/rated.length : 0;
+  const rated=vs.filter(v=>v.avg>0);
+  const avg = rated.length ? rated.reduce((s,v)=>s+v.avg,0)/rated.length : 0;
   const cnt={}; vs.forEach(v=>{const g=v.genre||"未分類"; cnt[g]=(cnt[g]||0)+1;});
-  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];
+  const totalVisits = vs.reduce((s,v)=>s+v.count,0);
   const kpi=(l,v,u)=>el("div",{class:"kpi"},el("div",{class:"k"},l),el("div",{class:"v"},v,u&&el("small",{},u)));
   const k=$("#kpis"); k.textContent="";
-  k.append(kpi("行った店",vs.length,"件"), kpi("平均評価",rated.length?avg.toFixed(1):"–",rated.length?"/ 5":""),
-    kpi("★5の店",vs.filter(v=>v.rating===5).length,"件"), kpi("よく行くジャンル",top?top[0]:"–",top?top[1]+"件":""));
+  k.append(kpi("行った店",vs.length,"軒"), kpi("訪問回数",totalVisits,"回"), kpi("平均評価",rated.length?avg.toFixed(1):"–",rated.length?"/ 5":""), kpi("★5の店",vs.filter(v=>v.rating===5||v.avg>=4.75).length,"軒"));
+  // K: 未評価
+  const un = vs.filter(v=>!v.rating);
+  const ub=$("#unrated"); ub.textContent="";
+  if (un.length || S.onlyUnrated) ub.append(el("button",{class:"btn sm "+(S.onlyUnrated?"":"ghost"),style:"width:100%;margin-bottom:10px",onclick:()=>{S.onlyUnrated=!S.onlyUnrated;renderVisits();}},
+    S.onlyUnrated ? "すべての記録を表示" : `⭐ ★を付けていない記録が ${un.length} 件あります`));
   if (S.filterGenre!=="すべて" && !cnt[S.filterGenre]) S.filterGenre="すべて";
   const fg=$("#fgenres"); fg.textContent="";
   ["すべて",...Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])].forEach(g=>fg.append(el("button",{type:"button",class:"chip sm"+(g===S.filterGenre?" on":""),onclick:()=>{S.filterGenre=g;renderVisits();}}, g+(g==="すべて"?"":" "+cnt[g]))));
   const q=$("#q").value.trim().toLowerCase(), sort=$("#sort").value;
-  let rows=vs.filter(v=>(S.filterGenre==="すべて"||(v.genre||"未分類")===S.filterGenre)&&(!q||[v.name,v.area,v.memo,v.genre].join(" ").toLowerCase().includes(q)));
-  rows.sort((a,b)=> sort==="rating" ? (b.rating-a.rating)||(b.date||"").localeCompare(a.date||"")
-    : sort==="ratingAsc" ? (a.rating-b.rating)||(b.date||"").localeCompare(a.date||"")
+  let rows=vs.filter(v=>(S.filterGenre==="すべて"||(v.genre||"未分類")===S.filterGenre)&&(!S.onlyUnrated||!v.rating)&&(!q||[v.name,v.area,v.genre,...v.log.map(x=>x.m)].join(" ").toLowerCase().includes(q)));
+  rows.sort((a,b)=> sort==="rating" ? ((b.avg||b.rating)-(a.avg||a.rating))||(b.date||"").localeCompare(a.date||"")
+    : sort==="ratingAsc" ? ((a.avg||a.rating)-(b.avg||b.rating))||(b.date||"").localeCompare(a.date||"")
+    : sort==="count" ? (b.count-a.count)||(b.date||"").localeCompare(a.date||"")
     : sort==="name" ? a.name.localeCompare(b.name,"ja")
     : (b.date||"").localeCompare(a.date||"")||(b.createdAt-a.createdAt));
   const list=$("#list"); list.textContent="";
   if (!vs.length) { list.append(el("div",{class:"empty"},"まだ記録がありません。",el("br"),"「さがす」で「行った」を押すか、「＋追加」で登録できます。")); return; }
   if (!rows.length) { list.append(el("div",{class:"empty"},"条件に合う記録がありません。")); return; }
   rows.forEach(v=>{
-    const url = safeUrl(v.url) || (v.lat!=null ? mapsSearch(v.name+" "+(v.area||"")) : mapsSearch(v.name+" "+(v.area||"")));
-    list.append(el("div",{class:"card"},
+    const url = safeUrl(v.url) || mapsSearch(v.name+" "+(v.area||""));
+    const near = S.shops && S.shops.find(s=>findVisit(s)===v);
+    const dist = near ? near.dist : (S.pos && v.lat!=null ? distM(S.pos.lat,S.pos.lng,v.lat,v.lng) : null);
+    const pc = v.photoCount || (S.photoCache[v.id]||[]).length;
+    const card = el("div",{class:"card"},
       el("div",{class:"top"}, el("div",{class:"name"},v.name),
-        el("div",{style:"display:flex;flex:0 0 auto"}, el("button",{class:"iconbtn",onclick:()=>openModal(v)},"編集"), el("button",{class:"iconbtn",onclick:()=>askDelete(v)},"削除"))),
+        el("div",{style:"display:flex;flex:0 0 auto"}, el("button",{class:"iconbtn",onclick:()=>openModal("edit", v)},"編集"), el("button",{class:"iconbtn",onclick:()=>askDelete(v)},"削除"))),
       el("div",{style:"display:flex;align-items:center;gap:8px;flex-wrap:wrap"},
-        starsEl(v.rating, n=>{ if(n===v.rating) return; commit({action:"upsert",visit:cleanVisit({...v,rating:n})}); toast(STAR_TXT[n]+" に更新"); }),
-        el("span",{style:"font-size:12px;color:var(--sub)"}, v.rating?STAR_TXT[v.rating].slice(3):"未評価")),
-      el("div",{class:"meta"}, v.genre&&el("span",{},"🍽 "+v.genre), v.area&&el("span",{},"📍 "+v.area), v.date&&el("span",{},"📅 "+v.date.replace(/-/g,"/")),
-        (S.pos && v.lat!=null) && el("span",{},"いまから "+fmtDist(distM(S.pos.lat,S.pos.lng,v.lat,v.lng)))),
+        starsEl(v.rating, n=>{ if(n===v.rating) return; const log=v.log.map(x=>({...x})); if(!log.length) log.push({id:nid("l_"),d:v.date||today(),r:0,m:""}); log[log.length-1].r=n;
+          commit({action:"upsert",visit:cleanVisit({...v,log})}); toast(STAR_TXT[n]+" に更新"); }),
+        el("span",{style:"font-size:12px;color:var(--sub)"}, v.rating ? `前回 ${STAR_TXT[v.rating].slice(3)}` : "未評価")),
+      el("div",{class:"meta"},
+        el("span",{style:"font-weight:700;color:var(--ink)"}, `${v.count}回${v.avg && v.count>1 ? `・平均★${v.avg.toFixed(1)}` : ""}`),
+        v.genre&&el("span",{},"🍽 "+v.genre), v.area&&el("span",{},"📍 "+v.area), v.date&&el("span",{},"📅 "+fmtDate(v.date)),
+        dist!=null && el("span",{},"いまから "+fmtDist(dist))),
       v.memo && el("div",{class:"memo"},v.memo),
-      el("div",{}, el("a",{href:url,target:"_blank",rel:"noopener",style:"font-size:13px;font-weight:700;text-decoration:none"},"🗺 地図を開く"))
-    ));
+      el("div",{class:"meta",style:"gap:12px"},
+        el("a",{href:url,target:"_blank",rel:"noopener",style:"font-size:13px;font-weight:700;text-decoration:none"},"🗺 地図"),
+        el("a",{href:routeUrl({...v, lat:near?near.lat:v.lat, lng:near?near.lng:v.lng}),target:"_blank",rel:"noopener",style:"font-size:13px;font-weight:700;text-decoration:none"},"🚶 ここに行く"),
+        el("button",{class:"linkbtn",style:"font-size:13px;text-decoration:none",onclick:()=>openModal("revisit", v)},"✅ また行った"),
+        (pc>0 && S.cfg) && el("button",{class:"linkbtn",style:"font-size:13px;text-decoration:none",onclick:()=>{ S.openPhotos[v.id]=!S.openPhotos[v.id]; renderVisits(); }}, `📷 写真${pc}枚`))
+    );
+    if (S.openPhotos[v.id] && S.cfg) card.append(photoStrip(v));
+    list.append(card);
   });
 }
 
-/* ---------- add / edit modal ---------- */
+/* ---------- render: stats (M) ---------- */
+function renderStats(){
+  const w=$("#statsWrap"); w.textContent="";
+  const entries = []; S.visits.forEach(v=>v.log.forEach(x=>{ if (x.d) entries.push({...x, v}); }));
+  if (!entries.length) { w.append(el("div",{class:"panel"}, el("h2",{},"振り返り"), el("div",{class:"empty"},"記録がたまると、ここに月ごとの外食回数やジャンルの割合が表示されます。"))); return; }
+  const now = new Date(); const ym = d => d.slice(0,7);
+  const thisYM = ymd(now).slice(0,7), thisY = String(now.getFullYear());
+  const firsts = S.visits.map(v=>v.log[0]?.d).filter(Boolean);
+  const kpi=(l,v,u)=>el("div",{class:"kpi"},el("div",{class:"k"},l),el("div",{class:"v"},v,u&&el("small",{},u)));
+  const p1 = el("div",{class:"panel"}, el("h2",{},"📊 振り返り"),
+    el("div",{class:"kpis"},
+      kpi("今月の外食", entries.filter(e=>ym(e.d)===thisYM).length, "回"),
+      kpi("今月の新しい店", firsts.filter(d=>ym(d)===thisYM).length, "軒"),
+      kpi(`${thisY}年の外食`, entries.filter(e=>e.d.startsWith(thisY)).length, "回"),
+      kpi("今月の平均★", (()=>{ const r=entries.filter(e=>ym(e.d)===thisYM&&e.r); return r.length?(r.reduce((s,e)=>s+e.r,0)/r.length).toFixed(1):"–"; })(), "")));
+  // 月別（直近12か月）
+  const months=[]; for (let i=11;i>=0;i--){ const d=new Date(now.getFullYear(), now.getMonth()-i, 1); months.push(ymd(d).slice(0,7)); }
+  const mc = months.map(m=>entries.filter(e=>ym(e.d)===m).length); const mx=Math.max(1,...mc);
+  p1.append(el("div",{class:"label",style:"margin-top:4px"},"月ごとの外食回数（直近12か月）"),
+    el("div",{class:"bars"}, months.map((m,i)=>el("div",{class:"b",title:`${m}：${mc[i]}回`}, el("em",{}, mc[i]||""), el("i",{style:`height:${Math.round(mc[i]/mx*100)}%`}), el("span",{}, String(Number(m.slice(5)))+"月")))));
+  w.append(p1);
+  // ジャンルの割合
+  const gc={}; entries.forEach(e=>{ const g=e.v.genre||"未分類"; gc[g]=(gc[g]||0)+1; });
+  const gs = Object.entries(gc).sort((a,b)=>b[1]-a[1]); const gt = entries.length;
+  const p2 = el("div",{class:"panel"}, el("h2",{},"🍽 ジャンルの割合"));
+  gs.forEach(([g,n])=>p2.append(el("div",{class:"hbar"}, el("span",{},g), el("div",{class:"t"}, el("i",{style:`width:${Math.round(n/gt*100)}%`})), el("span",{style:"text-align:right"}, Math.round(n/gt*100)+"%"))));
+  w.append(p2);
+  // よく行く店・★5
+  const p3 = el("div",{class:"panel"}, el("h2",{},"🏆 よく行く店"));
+  const top = S.visits.slice().sort((a,b)=>(b.count-a.count)||(b.avg-a.avg)).slice(0,5);
+  p3.append(el("div",{class:"rank"}, top.map((v,i)=>el("div",{class:"r"}, el("span",{style:"font-weight:900;color:var(--accent-d)"},`${i+1}`), el("b",{},v.name), el("span",{class:"note",style:"margin:0"}, `${v.count}回${v.avg?`・★${v.avg.toFixed(1)}`:""}`)))));
+  const fives = S.visits.filter(v=>v.avg>=4.75 || v.rating===5).sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  p3.append(el("h2",{style:"margin-top:16px"},"⭐ ★5の店"));
+  p3.append(fives.length ? el("div",{class:"rank"}, fives.map(v=>el("div",{class:"r"}, el("b",{},v.name), el("span",{class:"note",style:"margin:0"}, `${v.genre||""}・${fmtDate(v.date)}`)))) : el("div",{class:"note"},"まだありません"));
+  w.append(p3);
+}
+function renderAll(){ renderVisits(); renderResults(); renderStats(); }
+
+/* ---------- modal: new / revisit / edit ---------- */
 function fillGenreSelect(){
   const s=$("#fGenre"); s.textContent="";
   s.append(el("option",{value:""},"選択してください")); [...GENRES,"その他"].forEach(g=>s.append(el("option",{value:g},g)));
@@ -649,19 +1004,76 @@ function renderFStars(){
   const n = starsEl(S.fRating, i=>{S.fRating=i; renderFStars();}, "big"); n.id="fStars"; $("#fStars").replaceWith(n);
   $("#fStarText").textContent = STAR_TXT[S.fRating];
 }
-function setForm(v){
+function setShopForm(v){
   $("#fName").value=v.name||""; $("#fGenre").value = GENRES.includes(v.genre)||v.genre==="その他" ? v.genre : (v.genre?"その他":"");
-  $("#fArea").value=v.area||""; $("#fDate").value=v.date||today(); $("#fMemo").value=v.memo||"";
-  S.fExtra = {lat:v.lat??"", lng:v.lng??"", osmId:v.osmId||"", url:v.url||""};
+  $("#fArea").value=v.area||"";
+  S.fExtra = {lat:v.lat??"", lng:v.lng??"", osmId:v.osmId||"", placeId:v.placeId||"", url:v.url||""};
 }
-function openModal(v={}, isEdit){
-  isEdit = isEdit ?? !!v.id;
-  S.editing = isEdit ? v.id : null;
-  $("#mTitle").textContent = isEdit ? (v.date===today() && v.id ? "記録を更新" : "記録を編集") : (v.name ? "行った！を記録" : "行った店を追加");
-  $("#pickBox").style.display = (isEdit || v.name) ? "none" : "";
-  $("#pickList").textContent=""; $("#pickQ").style.display="none"; $("#pickQ").value=""; $("#paste").value=""; $("#parsed").textContent="";
-  setForm(v); S.fRating = v.rating||0; renderFStars();
+function show(id, on){ $(id).style.display = on ? "" : "none"; }
+function openModal(mode, v={}){
+  S.mode = mode; S.editing = v.id || null; S.newPhotos = [];
+  const titles = {new: v.name ? "行った！を記録" : "行った店を追加", revisit:"また行った！", edit:"記録を編集"};
+  $("#mTitle").textContent = titles[mode];
+  show("#pickBox", mode==="new" && !v.name);
+  show("#shopFields", mode!=="revisit");
+  show("#mShopName", mode==="revisit"); $("#mShopName").textContent = v.name||"";
+  show("#historyBox", mode==="edit");
+  show("#photoBox", !!S.cfg && S.serverVer>=2);
+  $("#visitHead").textContent = mode==="edit" ? "最新の訪問" : (mode==="revisit" ? `今回の訪問（${(v.count||1)+1}回目）` : "今回の訪問");
+  $("#pickList").textContent=""; show("#pickQ", false); $("#pickQ").value=""; $("#paste").value=""; $("#parsed").textContent="";
+  setShopForm(v);
+  if (mode==="edit") {
+    const last = v.log[v.log.length-1] || {d:v.date, r:v.rating, m:v.memo};
+    $("#fDate").value = last.d || today(); S.fRating = last.r||0; $("#fMemo").value = last.m||"";
+    renderHist(v); renderEditPhotos(v);
+  } else { $("#fDate").value = today(); S.fRating = 0; $("#fMemo").value = ""; }
+  renderFStars(); renderNewPhotos();
   $("#modal").classList.add("on");
+}
+function renderHist(v){
+  const h=$("#histList"); h.textContent="";
+  const cur = S.visits.find(x=>x.id===v.id) || v;
+  if (cur.log.length<=1) { h.append(el("div",{class:"note",style:"margin:0"},"訪問は1回です（上の欄で編集できます）")); return; }
+  cur.log.slice().reverse().forEach((x,i)=>h.append(el("div",{class:"h"},
+    el("span",{},fmtDate(x.d)||"日付なし"), el("span",{style:"color:var(--star)"}, x.r ? "★".repeat(x.r) : "未評価"), el("span",{class:"m"}, x.m||""),
+    i>0 && el("button",{class:"iconbtn",onclick:()=>{ const log=cur.log.filter(y=>y.id!==x.id); commit({action:"upsert",visit:cleanVisit({...cur,log})}); renderHist(cur); toast("その回の記録を削除しました"); }},"削除"))));
+}
+function renderEditPhotos(v){
+  const box=$("#editPhotos"); box.textContent="";
+  if (!S.cfg || S.serverVer<2) { box.append(el("span",{class:"note",style:"margin:0"},"写真はスプレッドシート同期（最新版）で使えます")); return; }
+  box.append(el("div",{class:"loading",style:"padding:6px"},el("div",{class:"spin"}),"読み込み中…"));
+  loadPhotos(v).then(ps=>{ box.textContent=""; if(!ps.length) box.append(el("span",{class:"note",style:"margin:0"},"まだありません"));
+    ps.forEach(p=>box.append(el("div",{class:"ph"}, el("img",{src:p.thumb,alt:""}),
+      el("button",{class:"x",title:"削除",onclick:async()=>{ try { await api("POST",{action:"photoDelete",id:p.id}); S.photoCache[v.id]=(S.photoCache[v.id]||[]).filter(x=>x.id!==p.id);
+        const cv=S.visits.find(x=>x.id===v.id); if(cv) cv.photoCount=Math.max(0,(cv.photoCount||1)-1); renderEditPhotos(v); renderVisits(); toast("写真を削除しました"); } catch(e){ toast("削除できませんでした"); } }},"✕")))); })
+    .catch(()=>{ box.textContent=""; box.append(el("span",{class:"err"},"読み込めませんでした")); });
+}
+function renderNewPhotos(){
+  const box=$("#photoPrev"); box.textContent="";
+  S.newPhotos.forEach((p,i)=>box.append(el("div",{class:"ph"}, el("img",{src:p.thumb,alt:""}), el("button",{class:"x",onclick:()=>{S.newPhotos.splice(i,1);renderNewPhotos();}},"✕"))));
+}
+function loadImg(file){ return new Promise((res,rej)=>{ const u=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{res(im); URL.revokeObjectURL(u);}; im.onerror=rej; im.src=u; }); }
+function toJpeg(im, max, q){ const sc=Math.min(1, max/Math.max(im.naturalWidth, im.naturalHeight)); const c=document.createElement("canvas");
+  c.width=Math.round(im.naturalWidth*sc); c.height=Math.round(im.naturalHeight*sc); c.getContext("2d").drawImage(im,0,0,c.width,c.height); return c.toDataURL("image/jpeg", q); }
+async function addPhotos(files){
+  for (const f of [...files]) {
+    if (S.newPhotos.length>=3) { toast("写真は1回に3枚までです"); break; }
+    try { const im = await loadImg(f); let thumb = toJpeg(im, 360, .7); if (thumb.length>40000) thumb = toJpeg(im, 280, .55);
+      S.newPhotos.push({thumb, full: toJpeg(im, 1600, .82)}); } catch(e){ toast("この画像は読み込めませんでした"); }
+  }
+  renderNewPhotos();
+}
+async function uploadPhotos(shopId, name, date, photos){
+  if (!photos.length) return;
+  toast(`写真を保存中…（${photos.length}枚）`);
+  let ok=0;
+  for (const p of photos) {
+    try { const j = await api("POST",{action:"photoAdd", shopId, name, date, thumb:p.thumb, full:p.full});
+      ok++; (S.photoCache[shopId] ||= []).push(j.photo); const v=S.visits.find(x=>x.id===shopId); if (v) v.photoCount=(v.photoCount||0)+1; }
+    catch(e){}
+  }
+  renderVisits();
+  toast(ok===photos.length ? "写真を保存しました" : `写真の保存に一部失敗しました（${ok}/${photos.length}枚）`);
 }
 async function pickNear(){
   const b=$("#pickNear"); b.disabled=true; b.textContent="📍 位置を確認中…";
@@ -669,17 +1081,15 @@ async function pickNear(){
     let pos;
     try { pos = await getPosition(); } catch(e){ if(!S.pos) throw e; pos = S.pos; }
     b.textContent="🔍 近くのお店を検索中…";
-    const labelP = reverseLabel(pos.lat,pos.lng);
     let shops;
-    // 直前の検索結果がほぼ同じ場所なら、それを使い回す
-    if (S.shops && S.pos && distM(S.pos.lat,S.pos.lng,pos.lat,pos.lng) < 150) shops = S.shops.map(s=>({...s, dist:distM(pos.lat,pos.lng,s.lat,s.lng)}));
-    else shops = await fetchShops(pos.lat,pos.lng,600);
+    if (S.shops && S.pos && distM(S.pos.lat,S.pos.lng,pos.lat,pos.lng) < 150) shops = S.shops.map(s=>({...s}));
+    else shops = (await fetchShops(pos.lat,pos.lng,600)).shops;
+    shops.forEach(s=>{ s.dist = distM(pos.lat,pos.lng,s.lat,s.lng); s.area = s.addr || S.placeLabel || ""; });
     shops.sort((a,b)=>a.dist-b.dist);
     S.pickShops = shops;
-    $("#pickQ").style.display=""; renderPick();
+    show("#pickQ", true); renderPick();
     if (!shops.length) $("#pickList").append(el("div",{class:"note"},"近くにお店が見つかりませんでした。下に店名を入力してください。"));
-    labelP.then(l=>{ (S.pickShops||[]).forEach(s=>{ if(!s.addr) s.area=l; }); });
-    S.pickShops.forEach(s=>{ s.area = s.addr || S.placeLabel || ""; });
+    if (!S.placeLabel) reverseLabel(pos.lat,pos.lng).then(l=>{ (S.pickShops||[]).forEach(s=>{ if(!s.addr) s.area=l; }); if (!$("#fArea").value) $("#fArea").value=l; });
   } catch(e){
     $("#pickList").textContent=""; $("#pickList").append(el("div",{class:"err"}, e.code==="denied" ? "位置情報が許可されていません。店名を手入力してください。" : "近くのお店を取得できませんでした。店名を手入力してください。"));
   } finally { b.disabled=false; b.textContent="📍 今いる場所の近くから選ぶ"; }
@@ -687,10 +1097,11 @@ async function pickNear(){
 function renderPick(){
   const q=norm($("#pickQ").value); const box=$("#pickList"); box.textContent="";
   (S.pickShops||[]).filter(s=>!q||norm(s.name).includes(q)).slice(0,40).forEach(s=>{
-    box.append(el("button",{type:"button",class: S.fExtra.osmId===s.osmId?"on":"", onclick:()=>{
+    const sel = (s.pid && S.fExtra.placeId===s.pid) || (s.osmId && S.fExtra.osmId===s.osmId);
+    box.append(el("button",{type:"button",class:sel?"on":"", onclick:()=>{
       const v = findVisit(s);
-      if (v) { closeModals(); openModal({...v, date:today()}, true); toast("記録済みの店です。評価を更新できます"); return; }
-      setForm({name:s.name,genre:s.genre,area:s.area,lat:s.lat,lng:s.lng,osmId:s.osmId, memo:$("#fMemo").value, date:$("#fDate").value}); renderPick();
+      if (v) { openModal("revisit", v); toast("記録済みの店です。「また行った」として記録します"); return; }
+      setShopForm({name:s.name,genre:s.genre,area:s.area,lat:s.src==="osm"?s.lat:null,lng:s.src==="osm"?s.lng:null,osmId:s.osmId||"",placeId:s.pid||"",url:s.uri||""}); renderPick();
     }}, el("span",{}, s.name, el("small",{style:"margin-left:6px"}, s.genre)), el("small",{}, fmtDist(s.dist))));
   });
 }
@@ -706,18 +1117,52 @@ function parsePaste(){
   $("#parsed").textContent = name||u ? "✓ 読み取りました（内容を確認してください）" : "";
 }
 function save(){
-  const name=$("#fName").value.trim(); if(!name){ $("#fName").focus(); toast("店名を入れてください"); return; }
-  const old = S.editing ? S.visits.find(v=>v.id===S.editing) : null;
-  const v = cleanVisit({id:S.editing||nid(), name, genre:$("#fGenre").value, area:$("#fArea").value.trim(), date:$("#fDate").value,
-    rating:S.fRating, memo:$("#fMemo").value.trim(), ...S.fExtra, createdAt:old?.createdAt||Date.now()});
-  commit({action:"upsert", visit:v}); closeModals();
-  toast(old ? "更新しました" : "行ったリストに追加しました");
+  const date = $("#fDate").value || today(), r = S.fRating, m = $("#fMemo").value.trim();
+  const photos = S.newPhotos.slice();
+  let v;
+  if (S.mode==="revisit") {
+    const cur = S.visits.find(x=>x.id===S.editing); if (!cur) { closeModals(); return; }
+    v = cleanVisit({...cur, log:[...cur.log, {id:nid("l_"), d:date, r, m}]});
+    commit({action:"upsert", visit:v}); toast(`${cur.count+1}回目の訪問を記録しました`);
+  } else {
+    const name=$("#fName").value.trim(); if(!name){ $("#fName").focus(); toast("店名を入れてください"); return; }
+    const base = {name, genre:$("#fGenre").value, area:$("#fArea").value.trim(), ...S.fExtra};
+    if (S.mode==="edit") {
+      const cur = S.visits.find(x=>x.id===S.editing); if (!cur) { closeModals(); return; }
+      const log = cur.log.map(x=>({...x})); if (!log.length) log.push({id:nid("l_"),d:date,r,m}); else Object.assign(log[log.length-1], {d:date, r, m});
+      v = cleanVisit({...cur, ...base, log}); commit({action:"upsert", visit:v}); toast("更新しました");
+    } else {
+      v = cleanVisit({id:nid(), ...base, log:[{id:nid("l_"), d:date, r, m}], createdAt:Date.now()});
+      commit({action:"upsert", visit:v}); toast("行ったリストに追加しました");
+    }
+  }
+  closeModals();
+  if (photos.length && S.cfg && S.serverVer>=2) {
+    // 店の記録が送られてから写真を送る
+    const go = () => S.pending.length ? setTimeout(go, 500) : uploadPhotos(v.id, v.name, date, photos);
+    go();
+  }
 }
-let pendingDel=null;
-function askDelete(v){ pendingDel=v; $("#cText").textContent=`「${v.name}」の記録を削除します。元に戻せません。`; $("#confirm").classList.add("on"); }
+let confirmAct=null;
+function askDelete(v){
+  $("#cTitle").textContent="削除しますか？";
+  $("#cText").textContent=`「${v.name}」の記録（${v.count}回分${v.photoCount?`・写真${v.photoCount}枚`:""}）を削除します。元に戻せません。`;
+  confirmAct=()=>{ commit({action:"delete",id:v.id}); toast("削除しました"); };
+  $("#confirm").classList.add("on");
+}
 function closeModals(){ document.querySelectorAll(".modal").forEach(m=>m.classList.remove("on")); }
 
-/* ---------- settings ---------- */
+/* ---------- saved places (P) ---------- */
+function openPlaceSave(){ $("#plName").value = S.placeLabel || ""; $("#placeModal").classList.add("on"); setTimeout(()=>$("#plName").focus(),50); }
+function savePlace(){
+  const n=$("#plName").value.trim(); if(!n){ $("#plName").focus(); return; }
+  if (!S.pos) return;
+  const list = (S.settings.savedPlaces||[]).filter(p=>p.n!==n);
+  list.unshift({id:nid("pl_"), n, lat:+S.pos.lat.toFixed(5), lng:+S.pos.lng.toFixed(5)});
+  S.settings.savedPlaces = list.slice(0,20); saveSettings(); closeModals(); toast("「"+n+"」を保存しました");
+}
+
+/* ---------- settings modal ---------- */
 function shareLink(){
   const raw = JSON.stringify({u:S.cfg.url, t:S.cfg.token});
   const b64 = btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
@@ -725,10 +1170,17 @@ function shareLink(){
 }
 function openSettings(){
   $("#sUrl").value = S.cfg?.url||""; $("#sTok").value = S.cfg?.token||""; $("#sMsg").textContent="";
-  $("#shareBox").style.display = S.cfg ? "" : "none"; if (S.cfg) $("#shareUrl").value = shareLink();
+  $("#pAuto").checked = !!S.prefs.autoSearch; $("#pTime").checked = !!S.prefs.timeAdjust;
+  show("#shareBox", !!S.cfg); if (S.cfg) $("#shareUrl").value = shareLink();
+  const si=$("#srcInfo"); si.textContent="";
+  si.append(!S.cfg ? "同期を設定すると、Googleマップのデータも使えるようになります（鍵の登録が必要）。現在はOpenStreetMapを使用中です。"
+    : S.serverVer<2 ? "スプレッドシート側（Code.gs）が旧版です。最新版に更新するとGoogleマップのデータが使えます。現在はOpenStreetMapを使用中です。"
+    : S.placesOn ? "Googleマップのデータを使用中です（1日30回まで。超えたら自動でOpenStreetMapに切り替え）。"
+    : "Googleマップの鍵が未登録のため、OpenStreetMapを使用中です。");
+  renderSaved();
   $("#settings").classList.add("on");
 }
-async function saveSettings(){
+async function connect(){
   const url=$("#sUrl").value.trim(), token=$("#sTok").value.trim(); const m=$("#sMsg"); m.textContent="";
   if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { m.append(el("div",{class:"err"},"URLは https://script.google.com/macros/s/…/exec の形です")); return; }
   if (!token) { m.append(el("div",{class:"err"},"合言葉を入れてください")); return; }
@@ -736,14 +1188,13 @@ async function saveSettings(){
   const prev=S.cfg; S.cfg={url,token};
   try {
     const j = await api("GET");
-    // 初回接続：この端末だけにある記録をスプレッドシートへ送る
     const server = new Set((j.visits||[]).map(v=>v.id));
     const localOnly = S.visits.filter(v=>!server.has(v.id));
     S.pending = [...localOnly.map(v=>({action:"upsert",visit:cleanVisit(v)})), ...S.pending.filter(o=>!localOnly.some(v=>o.visit?.id===v.id))];
     ls.set(K.cfg, S.cfg); saveLocal();
-    serverMerge(j.visits); await flush(false); setSync("ok");
+    await pull();
     m.append(el("div",{class:"ok"}, `✓ 接続できました（記録 ${S.visits.length}件）`));
-    $("#shareBox").style.display=""; $("#shareUrl").value=shareLink();
+    show("#shareBox", true); $("#shareUrl").value=shareLink();
   } catch(e){
     S.cfg=prev; m.append(el("div",{class:"err"}, e.code==="auth" ? "合言葉が違います" : "接続できません。URL・デプロイ設定（アクセスできるユーザー：全員）を確認してください"));
   } finally { btn.disabled=false; btn.textContent="接続して保存"; }
@@ -759,17 +1210,24 @@ function readSetupHash(){
   return true;
 }
 
-/* ---------- nav & wiring ---------- */
+/* ---------- nav ---------- */
 function showView(n){
-  document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on",s.id==="v-"+n));
-  document.querySelectorAll("[data-v]").forEach(b=>b.classList.toggle("on",b.dataset.v===n));
-  window.scrollTo({top:0});
+  if (n==="visits"||n==="stats") S.rightView = n;
+  document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on", s.id==="v-"+n));
+  $("#v-visits").classList.toggle("pc-on", S.rightView==="visits");
+  $("#v-stats").classList.toggle("pc-on", S.rightView==="stats");
+  document.querySelectorAll(".tabs [data-v], .bnav [data-v]").forEach(b=>b.classList.toggle("on",b.dataset.v===n));
+  document.querySelectorAll("#seg [data-v]").forEach(b=>b.classList.toggle("on",b.dataset.v===S.rightView));
+  if (n==="stats") renderStats();
+  if (window.matchMedia("(max-width:1099px)").matches) window.scrollTo({top:0});
 }
+
+/* ---------- wiring ---------- */
 document.addEventListener("click", e=>{
   const t=e.target.closest("[data-v],[data-act],[data-close]");
   if (!t) { if (e.target.classList?.contains("modal")) closeModals(); return; }
   if (t.dataset.v) showView(t.dataset.v);
-  else if (t.dataset.act==="add") openModal();
+  else if (t.dataset.act==="add") openModal("new");
   else if (t.hasAttribute("data-close")) closeModals();
 });
 document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModals(); });
@@ -777,32 +1235,49 @@ $("#locate").addEventListener("click", locate);
 $("#placeGo").addEventListener("click", placeSearch);
 $("#placeQ").addEventListener("keydown", e=>{ if(e.key==="Enter"&&!e.isComposing) placeSearch(); });
 $("#radius").addEventListener("change", ()=>{ if(S.pos) searchAt(S.pos, S.placeLabel); });
-$("#order").addEventListener("change", renderResults);
-$("#onlyNew").addEventListener("change", renderResults);
+["#order","#onlyNew","#hideClosed","#kidsOnly"].forEach(id=>$(id).addEventListener("change", renderResults));
 $("#q").addEventListener("input", renderVisits);
 $("#sort").addEventListener("change", renderVisits);
 $("#pickNear").addEventListener("click", pickNear);
 $("#pickQ").addEventListener("input", renderPick);
 $("#paste").addEventListener("input", parsePaste);
+$("#photoIn").addEventListener("change", e=>{ addPhotos(e.target.files); e.target.value=""; });
 $("#save").addEventListener("click", save);
-$("#cOk").addEventListener("click", ()=>{ if(pendingDel){ commit({action:"delete",id:pendingDel.id}); toast("削除しました"); } pendingDel=null; closeModals(); });
+$("#cOk").addEventListener("click", ()=>{ if(confirmAct) confirmAct(); confirmAct=null; closeModals(); });
 $("#syncBtn").addEventListener("click", openSettings);
-$("#sSave").addEventListener("click", saveSettings);
-$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; ls.del(K.cfg); saveLocal(); setSync("local"); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
+$("#sSave").addEventListener("click", connect);
+$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.serverVer=0; S.placesOn=null; ls.del(K.cfg); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
 $("#syncNow").addEventListener("click", async ()=>{ await pull(); toast(S.syncState==="ok"?"同期しました":"同期できませんでした"); });
 $("#shareCopy").addEventListener("click", async ()=>{ try{ await navigator.clipboard.writeText($("#shareUrl").value); toast("コピーしました"); }catch(e){ $("#shareUrl").select(); toast("選択してコピーしてください"); } });
+$("#pAuto").addEventListener("change", e=>{ S.prefs.autoSearch=e.target.checked; savePrefs(); });
+$("#pTime").addEventListener("change", e=>{ S.prefs.timeAdjust=e.target.checked; savePrefs(); renderResults(); });
+$("#plSave").addEventListener("click", savePlace);
+$("#plName").addEventListener("keydown", e=>{ if(e.key==="Enter"&&!e.isComposing) savePlace(); });
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && S.cfg) pull(); });
 window.addEventListener("hashchange", ()=>{ if (readSetupHash()) pull(); });
-window.addEventListener("online",()=>{ if(S.cfg) flush(false); });
+window.addEventListener("online", ()=>{ if(S.cfg) flush(false); });
 
 /* ---------- init ---------- */
 S.cfg = ls.get(K.cfg, null);
-S.visits = normalizeVisits(ls.get(K.cache, []));
+S.visits = ls.get(K.cache, []).filter(v=>v&&v.id&&v.name).map(normalizeVisit);
 S.pending = ls.get(K.pend, []);
+S.prefs = {...S.prefs, ...ls.get(K.prefs, {})};
+S.settings = {savedPlaces:[], ...ls.get(K.settings, {})};
 readSetupHash();
-fillGenreSelect(); renderGenres(); renderVisits(); renderResults();
+fillGenreSelect(); renderGenres(); renderSaved(); renderAll(); renderAttr();
 setSync(S.cfg ? "syncing" : "local");
-pull();
+const pulled = pull();
+// N: 開いたら自動で現在地検索（位置情報がすでに許可されているときだけ）
+(async ()=>{
+  if (!S.prefs.autoSearch) return;
+  try {
+    if (!navigator.permissions) return;
+    const st = await navigator.permissions.query({name:"geolocation"});
+    if (st.state==="granted") { await Promise.race([pulled, new Promise(r=>setTimeout(r,2500))]); locate(); }
+  } catch(e){}
+})();
+// O: オフラインでも開けるように
+if ("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();
 </script>
 </body>
