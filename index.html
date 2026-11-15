@@ -140,6 +140,11 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 .hist{display:flex;flex-direction:column;gap:6px;margin-top:6px}
 .hist .h{display:flex;gap:8px;align-items:center;font-size:13px;background:var(--bg);border-radius:10px;padding:7px 10px}
 .hist .h .m{flex:1;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist .q{font-size:13px;line-height:1.6;background:var(--warn-l);border-radius:10px;padding:9px 11px;overflow-wrap:anywhere}
+.hist .q .qb{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.hist .q .qb .btn{width:auto;flex:1 1 130px}
+.upd{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom));z-index:55;width:auto;max-width:92vw;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+@media (min-width:720px){.upd{bottom:80px}}
 .here{margin-top:10px;display:flex;flex-direction:column;gap:8px}
 .here .cand{display:flex;align-items:center;gap:10px;text-align:left;border:1.5px solid var(--line);background:var(--bg);border-radius:14px;padding:12px 14px;width:100%}
 .here .cand b{display:block;font-size:16px;line-height:1.35;word-break:break-word}
@@ -387,6 +392,7 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
     <div class="note" id="srcInfo" style="margin-top:0"></div>
     <h4>データの保存先</h4>
     <div id="dataLinks2"></div>
+    <div id="queueBox"></div>
     <h4>同期（スプレッドシート）</h4>
     <div class="note" style="margin-top:0">Googleスプレッドシートに記録を保存し、スマホ・タブレット・PCで共有します。</div>
     <label class="label" for="sLink">設定入りリンクを貼り付け（いちばん簡単）</label>
@@ -432,12 +438,13 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 const $ = s => document.querySelector(s);
 const GENRES = ["ラーメン","居酒屋・バー","カフェ","焼肉","寿司","中華","そば・うどん","カレー","定食・和食","イタリアン","レストラン","ファストフード"];
 const STAR_TXT = ["タップして選択（あとで変更できます）","★1 いまいち","★2 ふつう以下","★3 ふつう","★4 また行きたい","★5 最高！"];
-const K = {cfg:"gn-cfg", cache:"gn-cache", pend:"gn-pending", prefs:"gn-prefs", settings:"gn-settings", shop:"gn-shopcache"};
+const K = {cfg:"gn-cfg", cache:"gn-cache", pend:"gn-pending", park:"gn-parked", srv:"gn-srv", prefs:"gn-prefs", settings:"gn-settings", shop:"gn-shopcache"};
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
 const DAY = 86400000;
 
 const S = {
-  cfg:null, visits:[], pending:[], syncState:"local", syncing:false, serverVer:0, placesOn:null,
+  cfg:null, visits:[], pending:[], parked:[], inflight:null, syncState:"local", syncing:false, serverVer:0, placesOn:null,
+  pulling:false, lastPull:0, flushT:null, retryT:null, retryN:0, photoQ:0, photoBusy:false, visSig:"", vShown:40,
   settings:{savedPlaces:[]}, prefs:{autoSearchOn:false, timeAdjust:true},
   genre:"すべて", filterGenre:"すべて", onlyUnrated:false, pos:null, placeLabel:"", shops:null, src:"", searching:false, searchErr:"", timing:"", shown:30,
   mode:"new", editing:null, fRating:0, fExtra:{}, newPhotos:[], pickShops:null, photoCache:{}, openPhotos:{}, rightView:"visits", sheetUrl:"", photoUrl:"", srcReason:null
@@ -643,17 +650,24 @@ function clearCfg(){
 }
 
 /* ---------- sync ---------- */
+const PULL_GAP = 60000;                         // 画面に戻るたびの読み直しは60秒に1回まで
+const RETRY_SEC = [5, 15, 45, 120, 300];        // 失敗したときの送り直しの間隔（秒）
+const PERMANENT = /必須|unknown_action|bad_request/;  // 何度送っても通らない種類のエラー
 function setSync(state){
   S.syncState = state;
   const dot=$("#syncDot"), txt=$("#syncTxt"); dot.className="dot";
-  const n = S.pending.length;
+  const n = S.pending.length, ph = S.photoQ, pk = S.parked.length;
+  const wait = n ? `未送信 ${n}件${ph?`・写真${ph}枚`:""}` : ph ? `未送信 写真${ph}枚` : "";
   if (state==="local") { dot.classList.add("warn"); txt.textContent="この端末のみ（同期を設定）"; }
   else if (state==="syncing") { txt.textContent="同期中…"; }
-  else if (state==="ok") { dot.classList.add(n?"warn":"on"); txt.textContent = n ? `未送信 ${n}件` : "3台で同期中"; }
-  else if (state==="error") { dot.classList.add("off"); txt.textContent = n ? `オフライン・未送信 ${n}件` : "同期できません"; }
+  else if (state==="ok") {
+    if (pk) { dot.classList.add("off"); txt.textContent = `送信できない記録 ${pk}件`; }
+    else { dot.classList.add(wait?"warn":"on"); txt.textContent = wait || "3台で同期中"; }
+  }
+  else if (state==="error") { dot.classList.add("off"); txt.textContent = wait ? `オフライン・${wait}` : "同期できません"; }
   else if (state==="auth") { dot.classList.add("off"); txt.textContent="合言葉が違います"; }
 }
-function saveLocal(){ ls.set(K.cache, S.visits.map(cleanVisitKeepCount)); ls.set(K.pend, S.pending); }
+function saveLocal(){ ls.set(K.cache, S.visits.map(cleanVisitKeepCount)); ls.set(K.pend, S.pending); ls.set(K.park, S.parked); }
 function cleanVisitKeepCount(v){ return {...cleanVisit(v), photoCount:v.photoCount||0, updatedAt:v.updatedAt||0}; }
 function applyOp(list, op){
   if (op.action==="upsert") { const nv = normalizeVisit(op.visit); const i=list.findIndex(v=>v.id===nv.id);
@@ -661,27 +675,44 @@ function applyOp(list, op){
   if (op.action==="delete") return list.filter(v=>v.id!==op.id);
   return list;
 }
+// 記録の中身（更新時刻を除く）。同じなら画面を書き直さない
+const sigOf = list => JSON.stringify(list.map(v=>[v.id,v.name,v.genre,v.area,v.url,v.lat,v.lng,v.osmId,v.placeId,v.photoCount,v.log]));
+function touchVisits(){ VIX = null; NEAR = null; S.visSig = sigOf(S.visits); }
 function serverMerge(serverVisits){
   let list = (serverVisits||[]).filter(v=>v&&v.id&&v.name).map(normalizeVisit);
+  for (const op of S.parked) list = applyOp(list, op);
   for (const op of S.pending) list = applyOp(list, op);
-  S.visits = list; saveLocal(); renderAll();
+  if (sigOf(list) === S.visSig) return;         // 変わっていなければ何もしない
+  S.visits = list; touchVisits(); saveLocal(); renderAll();
 }
-async function api(method, body){
+const opBody = op => { const b = {}; for (const k in op) if (k[0] !== "_") b[k] = op[k]; return b; };
+const opId = op => op.action==="upsert" ? op.visit && op.visit.id : op.id;
+async function api(method, body, ms){
   const url = S.cfg.url;
   let r;
-  if (method==="GET") r = await fetchT(url+(url.includes("?")?"&":"?")+"token="+encodeURIComponent(S.cfg.token)+"&_="+Date.now(), {}, 30000);
-  else r = await fetchT(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({...body, token:S.cfg.token})}, 60000);
+  if (method==="GET") r = await fetchT(url+(url.includes("?")?"&":"?")+"token="+encodeURIComponent(S.cfg.token)+"&_="+Date.now(), {}, ms||30000);
+  else r = await fetchT(url, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({...body, token:S.cfg.token})}, ms||60000);
   if (!r.ok) throw {code:"http"};
   const j = await r.json();
   if (!j.ok) throw {code: j.error==="auth" ? "auth" : "server", msg:j.error, detail:j.detail};
   return j;
 }
-function pull(){ S.pullP = pullInner(); return S.pullP; }
+// force=true のときは必ず読み直す。そうでなければ、直前に同期済みなら省く
+function pull(force){
+  if (S.pulling) return S.pullP;
+  if (!force && S.cfg && S.syncState==="ok" && Date.now()-S.lastPull < PULL_GAP) {
+    if (S.pending.length || S.photoQ) kick();
+    return Promise.resolve();
+  }
+  S.pulling = true;
+  S.pullP = pullInner().finally(()=>{ S.pulling = false; });
+  return S.pullP;
+}
 async function pullInner(){
   if (!S.cfg) { setSync("local"); renderBanner(); return; }
   setSync("syncing");
   try {
-    await flush(true);
+    try { await flush(true); } catch(e){ if (e.code!=="server") throw e; }   // 1件が断られても、読み込みは続ける
     const j = await api("GET");
     S.serverVer = Number(j.ver)||1;
     if (S.serverVer >= 2) {
@@ -689,29 +720,169 @@ async function pullInner(){
       S.sheetUrl = j.sheetUrl || ""; S.photoUrl = j.photoUrl || ""; ls.set("gn-links", {s:S.sheetUrl, p:S.photoUrl}); renderDataLinks();
       if (j.settings && typeof j.settings==="object") { S.settings = {savedPlaces:[], ...j.settings}; ls.set(K.settings, S.settings); renderSaved(); }
     }
-    serverMerge(j.visits); setSync("ok");
-  } catch(e){ setSync(e.code==="auth"?"auth":"error"); }
-  renderBanner(); renderAttr(); renderDataLinks();
+    ls.set(K.srv, {v:S.serverVer, p:S.placesOn});   // 次回の起動で、応答を待たずに使えるよう覚えておく
+    serverMerge(j.visits); S.lastPull = Date.now(); S.retryN = 0; setSync("ok");
+  } catch(e){ setSync(e.code==="auth"?"auth":"error"); if (e.code!=="auth") scheduleRetry(); }
+  renderBanner(); renderAttr(); renderDataLinks(); renderQueue();
+  if (S.syncState==="ok") sendPhotos();
+}
+function park(op, msg){
+  const i = S.pending.indexOf(op); if (i>=0) S.pending.splice(i,1);
+  S.parked.push({...op, _err:String(msg||"").slice(0,120), _at:Date.now()});
+  saveLocal(); renderQueue();
 }
 async function flush(silent){
   if (!S.cfg || S.syncing) return;
-  S.syncing = true;
+  S.syncing = true; clearTimeout(S.flushT); S.flushT = null;
   try {
     while (S.pending.length) {
-      const op = S.pending[0];
-      const j = await api("POST", op);
-      S.pending.shift(); saveLocal();
-      if (!S.pending.length && j.visits) serverMerge(j.visits);
+      const op = S.pending[0]; S.inflight = op;
+      let j;
+      try { j = await api("POST", opBody(op)); }
+      catch(e){
+        if (e.code==="server") {
+          // 届いたうえで断られた記録。同じ記録で止まり続けないよう、3回でいったん脇に置いて次へ進む
+          op._n = (op._n||0)+1;
+          if (PERMANENT.test(e.msg||"") || op._n>=3) { park(op, e.msg); setSync(S.syncState); continue; }
+          saveLocal();
+        }
+        throw e;
+      }
+      const i = S.pending.indexOf(op); if (i>=0) S.pending.splice(i,1);
+      saveLocal(); S.retryN = 0;
+      if (!S.pending.length && j.visits) { serverMerge(j.visits); S.lastPull = Date.now(); }
     }
     if (!silent) setSync("ok");
-  } catch(e){ setSync(e.code==="auth"?"auth":"error"); if (silent) throw e; }
-  finally { S.syncing = false; }
+  } catch(e){ setSync(e.code==="auth"?"auth":"error"); if (e.code!=="auth") scheduleRetry(); if (silent) throw e; }
+  finally { S.syncing = false; S.inflight = null; renderQueue(); }
+}
+// 送信待ち（記録→写真の順）を送る
+async function kick(){ await flush(false); if (S.syncState==="ok") sendPhotos(); }
+function scheduleRetry(){
+  if (S.retryT || !S.cfg) return;
+  const ms = RETRY_SEC[Math.min(S.retryN, RETRY_SEC.length-1)]*1000; S.retryN++;
+  S.retryT = setTimeout(()=>{ S.retryT = null;
+    if (document.visibilityState!=="visible" || !S.cfg || S.syncState==="auth") return;   // 裏にいる間は送らない（戻ったときに送る）
+    if (S.syncState==="error") pull(true); else kick();
+  }, ms);
 }
 function commit(op){
-  S.visits = applyOp(S.visits, op);
-  if (S.cfg) S.pending.push(op);
+  S.visits = applyOp(S.visits, op); touchVisits();
+  if (S.cfg) {
+    // 同じ店への古い送信待ちは、新しい内容で置き換える（送信中の1件は残す）
+    const id = opId(op);
+    S.pending = S.pending.filter(o => o===S.inflight || !(o.action==="upsert" && opId(o)===id));
+    S.parked = S.parked.filter(o => opId(o)!==id);
+    S.pending.push(op);
+  }
   saveLocal(); renderAll();
-  if (S.cfg) { setSync(S.syncState==="ok"?"ok":S.syncState); flush(false); }
+  if (S.cfg) { setSync(S.syncState); clearTimeout(S.flushT); S.flushT = setTimeout(()=>{ S.flushT = null; kick(); }, 1200); }  // 続けて直したときは1回にまとめて送る
+}
+
+/* ---------- 未送信の写真（端末に保存しておき、送れるまで送り直す） ---------- */
+const PQ = (() => {
+  let dbp = null, mem = null;                   // mem：端末の保存領域が使えないときの代わり（画面を閉じると消える）
+  const open = () => dbp || (dbp = new Promise((res,rej)=>{
+    try { const r = indexedDB.open("gohan-navi", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("photoq", {keyPath:"id"});
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error("blocked")); } catch(e){ rej(e); } }));
+  const tx = (mode, fn) => open().then(db => new Promise((res,rej)=>{
+    const t = db.transaction("photoq", mode); const rq = fn(t.objectStore("photoq"));
+    t.oncomplete = () => res(rq && rq.result); t.onerror = t.onabort = () => rej(t.error); }));
+  const run = (mode, fn, memFn) => mem ? Promise.resolve(memFn()) : tx(mode, fn).catch(()=>{ mem = mem || []; return memFn(); });
+  return {
+    all: () => run("readonly", s=>s.getAll(), ()=>mem.slice()).then(a => (a||[]).sort((x,y)=>x.at-y.at)),
+    put: it => run("readwrite", s=>s.put(it), ()=>{ const i=mem.findIndex(x=>x.id===it.id); if (i>=0) mem[i]=it; else mem.push(it); }),
+    del: id => run("readwrite", s=>s.delete(id), ()=>{ mem = mem.filter(x=>x.id!==id); }),
+    clear: () => run("readwrite", s=>s.clear(), ()=>{ mem = []; })
+  };
+})();
+async function queuePhotos(shopId, name, date, photos){
+  for (const p of photos) await PQ.put({id:nid("q_"), shopId, name, date, thumb:p.thumb, full:p.full, sent:false, rej:0, at:Date.now()});
+  S.photoQ = (await PQ.all()).length; setSync(S.syncState);
+}
+async function sendPhotos(manual){
+  if (S.photoBusy) { if (manual) S.photoManual = true; return; }   // 送信中に「今すぐ送る」が押されたら、終わってからもう一度回す
+  if (!S.cfg || S.serverVer<2) return;
+  S.photoBusy = true;
+  let ok = 0, fail = 0, stuck = 0, wait = 0;
+  try {
+    const items = await PQ.all();
+    S.photoQ = items.length; if (!items.length) return;
+    setSync(S.syncState);
+    for (const it of items) {
+      if (!S.visits.some(v=>v.id===it.shopId)) { await PQ.del(it.id); continue; }             // 店の記録が削除済み
+      if (S.pending.some(o=>opId(o)===it.shopId) || S.parked.some(o=>opId(o)===it.shopId)) { wait++; continue; }  // 店の記録が先
+      if (it.rej>=3 && !manual) { stuck++; continue; }                                         // サーバーに3回断られた写真は、設定画面からの再送を待つ
+      try {
+        if (it.sent) {
+          // 前回の結果が分からないときは、すでに届いていないか確かめてから送り直す（二重登録を防ぐ）
+          const c = await api("POST", {action:"photos", shopId:it.shopId}, 30000);
+          S.photoCache[it.shopId] = c.photos||[];
+          if (S.photoCache[it.shopId].some(p=>p.thumb===it.thumb)) {
+            await PQ.del(it.id); ok++;
+            const v=S.visits.find(x=>x.id===it.shopId); if (v) v.photoCount = Math.max(v.photoCount||0, S.photoCache[it.shopId].length);
+            continue;
+          }
+        }
+        it.sent = true; await PQ.put(it);
+        const j = await api("POST", {action:"photoAdd", shopId:it.shopId, name:it.name, date:it.date, thumb:it.thumb, full:it.full}, 90000);
+        await PQ.del(it.id); ok++;
+        (S.photoCache[it.shopId] ||= []).push(j.photo);
+        const v=S.visits.find(x=>x.id===it.shopId); if (v) v.photoCount=(v.photoCount||0)+1;
+      } catch(e){
+        if (e && e.code==="server") { it.rej = (it.rej||0)+1; it.err = String(e.msg||"").slice(0,120); await PQ.put(it).catch(()=>{}); if (it.rej>=3) { stuck++; continue; } }
+        fail++; if (e && e.code==="auth") break;
+      }
+    }
+  } catch(e){ fail++; }
+  finally {
+    S.photoBusy = false;
+    try { S.photoQ = (await PQ.all()).length; } catch(e){}
+    setSync(S.syncState); renderQueue();
+    if (ok) { S.visSig = sigOf(S.visits); saveLocal(); renderVisits(); if ($("#v-cal").classList.contains("on") || S.rightView==="cal") renderCal(); }
+    if (ok && !fail && !stuck && !wait) { S.photoWarned = false; S.retryN = 0; toast("写真を保存しました"); }
+    else if (fail || stuck) {
+      // お知らせは最初の1回だけ（送り直しのたびには出さない）
+      if (manual || !S.photoWarned) toast(stuck && !fail ? `写真${stuck}枚を保存できませんでした。設定画面の「送信待ち」をご確認ください` : `写真${fail+stuck}枚はまだ送れていません。自動で送り直します`);
+      S.photoWarned = true;
+      if (fail) scheduleRetry();
+    }
+    if (S.photoManual) { S.photoManual = false; setTimeout(()=>sendPhotos(true), 0); }
+  }
+}
+
+/* ---------- 送信待ちの一覧（設定画面） ---------- */
+async function renderQueue(){
+  const box = $("#queueBox"); if (!box) return;
+  let ph = []; try { ph = await PQ.all(); } catch(e){}
+  if (S.photoQ !== ph.length) { S.photoQ = ph.length; setSync(S.syncState); }
+  box.textContent = "";
+  if (!S.cfg || (!S.pending.length && !S.parked.length && !ph.length)) return;
+  box.append(el("h4",{},"送信待ち"));
+  const list = el("div",{class:"hist"});
+  if (S.pending.length) list.append(el("div",{class:"q"}, el("div",{}, `記録 ${S.pending.length}件を送信待ちです。つながると自動で送ります。`)));
+  if (ph.length) {
+    const names = [...new Set(ph.map(p=>p.name).filter(Boolean))].slice(0,3).join("、");
+    const rejN = ph.filter(p=>p.rej>=3).length, why = (ph.find(p=>p.err)||{}).err;
+    list.append(el("div",{class:"q"}, el("div",{}, `写真 ${ph.length}枚を送信待ちです${names?`（${names}）`:""}。`,
+        rejN ? `うち${rejN}枚は保存を断られました。「今すぐ送る」でやり直せます。` : "つながると自動で送り直します。", why && el("span",{style:"color:var(--sub)"}, ` 理由：${why}`)),
+      el("div",{class:"qb"},
+        el("button",{class:"btn sm ghost",onclick:async()=>{ toast("写真を送っています…"); await kick(); await sendPhotos(true); }},"↻ 今すぐ送る"),
+        el("button",{class:"btn sm plain",onclick:()=>confirmBox("送信待ちの写真を取り消しますか？", `まだ送れていない写真 ${ph.length}枚を、この端末から消します。元に戻せません。`, "取り消す",
+          async()=>{ await PQ.clear(); S.photoQ=0; setSync(S.syncState); toast("送信待ちの写真を取り消しました"); })},"取り消す"))));
+  }
+  S.parked.forEach(op=>{
+    const nm = op.action==="upsert" ? (op.visit&&op.visit.name)||"" : "";
+    list.append(el("div",{class:"q"},
+      el("div",{}, op.action==="delete" ? "記録の削除をスプレッドシートに反映できませんでした。" : `「${nm}」の記録をスプレッドシートに保存できませんでした（この端末には残っています）。`,
+        op._err && el("span",{style:"color:var(--sub)"}, ` 理由：${op._err}`)),
+      el("div",{class:"qb"},
+        el("button",{class:"btn sm ghost",onclick:()=>{ S.parked = S.parked.filter(o=>o!==op); const o={...op}; delete o._n; delete o._err; delete o._at; S.pending.unshift(o); saveLocal(); setSync(S.syncState); renderQueue(); toast("もう一度送っています…"); kick(); }},"↻ もう一度送る"),
+        el("button",{class:"btn sm plain",onclick:()=>confirmBox("この変更を取り消しますか？", "スプレッドシートに保存できなかった変更を捨てて、スプレッドシートの内容に戻します。", "取り消す",
+          ()=>{ S.parked = S.parked.filter(o=>o!==op); saveLocal(); setSync(S.syncState); renderQueue(); pull(true); toast("変更を取り消しました"); })},"取り消す"))));
+  });
+  box.append(list);
 }
 function renderBanner(){
   const b=$("#verBanner"); b.textContent="";
@@ -820,8 +991,9 @@ async function fetchOsm(lat,lng,radius){
   }
   return {shops: parseOsm(raw), src:"osm", label:src};
 }
+const GOOGLE_WAIT = 15000;
 async function fetchGoogle(lat,lng,radius){
-  const j = await api("POST", {action:"nearby", lat, lng, radius});
+  const j = await api("POST", {action:"nearby", lat, lng, radius}, GOOGLE_WAIT);   // 返事が遅いときは長く待たずに地図データへ切り替える
   const di = (new Date().getDay()+6)%7;
   const shops = (j.places||[]).map(p=>({src:"google", pid:p.pid, name:p.name, genre:detectGenreG(p), lat:p.lat, lng:p.lng,
     rating:p.rating, n:p.n, price:PRICE[p.price]||"", open:p.open, nextClose:p.nextClose, nextOpen:p.nextOpen,
@@ -837,13 +1009,14 @@ function googleReason(){
   return null;
 }
 async function fetchShops(lat,lng,radius){
-  // 起動直後はスプレッドシートの応答（Google検索が使えるか）を最大6秒待つ
+  // 初めての端末だけ、スプレッドシートの応答（Google検索が使えるか）を最大6秒待つ。2回目以降は前回の結果を覚えているので待たない
   if (S.cfg && !S.serverVer && S.pullP) await Promise.race([S.pullP, new Promise(r=>setTimeout(r,6000))]);
   S.srcReason = googleReason();
   if (!S.srcReason) {
     try { return await fetchGoogle(lat,lng,radius); }
     catch(e){
       if (e.msg==="no_places_key") { S.placesOn=false; S.srcReason = googleReason(); }
+      else if (e && e.name==="AbortError") S.srcReason = {k:"gslow", t:`Googleマップの返事が${GOOGLE_WAIT/1000}秒以内になかったため、地図データ（OpenStreetMap）で探しています。`};
       else if (e.msg==="daily_limit") S.srcReason = {k:"limit", t:"今日のGoogle検索の上限（30回）に達したため、地図データ（OpenStreetMap）で探しています。明日になると戻ります。"};
       else S.srcReason = {k:"gerr", t:"Googleマップのデータを取得できなかったため、地図データ（OpenStreetMap）で探しています。"+(e.detail?`（詳細：${String(e.detail).slice(0,80)}）`:"")};
     }
@@ -906,9 +1079,29 @@ function timeBoost(genre){
     : {lbl:"深夜", g:{"ラーメン":.5,"居酒屋・バー":.3,"ファストフード":.3}};
   const w = T.g[genre]; return w ? {w, lbl:T.lbl} : null;
 }
+// 記録の索引（場所ID・地図ID・店名）。記録が増えても、検索結果との突き合わせが遅くならないようにする
+let VIX = null, NEAR = null;
+function vix(){
+  if (VIX) return VIX;
+  const pid=new Map(), osm=new Map(), nm=new Map();
+  for (const v of S.visits) {
+    if (v.placeId && !pid.has(v.placeId)) pid.set(v.placeId, v);
+    if (v.osmId && !osm.has(v.osmId)) osm.set(v.osmId, v);
+    const k = norm(v.name); if (k) { const a = nm.get(k); if (a) a.push(v); else nm.set(k, [v]); }
+  }
+  return VIX = {pid, osm, nm};
+}
 function findVisit(s){
-  return S.visits.find(v => (s.pid && v.placeId===s.pid) || (s.osmId && v.osmId===s.osmId) ||
-    (norm(v.name)===norm(s.name) && (v.lat==null || s.lat==null || distM(v.lat,v.lng,s.lat,s.lng) < 150)));
+  const X = vix();
+  return (s.pid && X.pid.get(s.pid)) || (s.osmId && X.osm.get(s.osmId)) ||
+    (X.nm.get(norm(s.name))||[]).find(v => v.lat==null || s.lat==null || distM(v.lat,v.lng,s.lat,s.lng) < 150);
+}
+// 記録ごとに「いまの検索結果にある同じ店」を1回だけ求めておく
+function nearMap(){
+  if (NEAR && NEAR.shops===S.shops) return NEAR.m;
+  const m = new Map();
+  if (S.shops) for (const s of S.shops) { const v = findVisit(s); if (v && !m.has(v.id)) m.set(v.id, s); }
+  NEAR = {shops:S.shops, m}; return m;
 }
 function scored(){
   const P = prefs(); const R = Number($("#radius").value);
@@ -1060,11 +1253,11 @@ function renderVisits(){
   // K: 未評価
   const un = vs.filter(v=>!v.rating);
   const ub=$("#unrated"); ub.textContent="";
-  if (un.length || S.onlyUnrated) ub.append(el("button",{class:"btn sm "+(S.onlyUnrated?"":"ghost"),style:"width:100%;margin-bottom:10px",onclick:()=>{S.onlyUnrated=!S.onlyUnrated;renderVisits();}},
+  if (un.length || S.onlyUnrated) ub.append(el("button",{class:"btn sm "+(S.onlyUnrated?"":"ghost"),style:"width:100%;margin-bottom:10px",onclick:()=>{S.onlyUnrated=!S.onlyUnrated;resetList();}},
     S.onlyUnrated ? "すべての記録を表示" : `⭐ ★を付けていない記録が ${un.length} 件あります`));
   if (S.filterGenre!=="すべて" && !cnt[S.filterGenre]) S.filterGenre="すべて";
   const fg=$("#fgenres"); fg.textContent="";
-  ["すべて",...Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])].forEach(g=>fg.append(el("button",{type:"button",class:"chip sm"+(g===S.filterGenre?" on":""),onclick:()=>{S.filterGenre=g;renderVisits();}}, g+(g==="すべて"?"":" "+cnt[g]))));
+  ["すべて",...Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])].forEach(g=>fg.append(el("button",{type:"button",class:"chip sm"+(g===S.filterGenre?" on":""),onclick:()=>{S.filterGenre=g;resetList();}}, g+(g==="すべて"?"":" "+cnt[g]))));
   const q=$("#q").value.trim().toLowerCase(), sort=$("#sort").value;
   let rows=vs.filter(v=>(S.filterGenre==="すべて"||(v.genre||"未分類")===S.filterGenre)&&(!S.onlyUnrated||!v.rating)&&(!q||[v.name,v.area,v.genre,...v.log.map(x=>x.m)].join(" ").toLowerCase().includes(q)));
   rows.sort((a,b)=> sort==="rating" ? ((b.avg||b.rating)-(a.avg||a.rating))||(b.date||"").localeCompare(a.date||"")
@@ -1075,9 +1268,10 @@ function renderVisits(){
   const list=$("#list"); list.textContent="";
   if (!vs.length) { list.append(el("div",{class:"empty"},"まだ記録がありません。",el("br"),"「さがす」で「行った」を押すか、「＋追加」で登録できます。")); return; }
   if (!rows.length) { list.append(el("div",{class:"empty"},"条件に合う記録がありません。")); return; }
-  rows.forEach(v=>{
+  const NM = nearMap();
+  const mk = v => {
     const url = safeUrl(v.url) || mapsSearch(v.name+" "+(v.area||""));
-    const near = S.shops && S.shops.find(s=>findVisit(s)===v);
+    const near = NM.get(v.id);
     const dist = near ? near.dist : (S.pos && v.lat!=null ? distM(S.pos.lat,S.pos.lng,v.lat,v.lng) : null);
     const pc = v.photoCount || (S.photoCache[v.id]||[]).length;
     const card = el("div",{class:"card"},
@@ -1099,9 +1293,26 @@ function renderVisits(){
         (pc>0 && S.cfg) && el("button",{class:"linkbtn",style:"font-size:13px;text-decoration:none",onclick:()=>{ S.openPhotos[v.id]=!S.openPhotos[v.id]; renderVisits(); }}, `📷 写真${pc}枚`))
     );
     if (S.openPhotos[v.id] && S.cfg) card.append(photoStrip(v));
-    list.append(card);
-  });
+    return card;
+  };
+  // 一度に作るのは40件まで。下まで来たら続きを自動で足す（作り直さないので、画面の位置は動かない）
+  let made = 0;
+  const fill = () => {
+    if (moreIO) moreIO.disconnect();
+    const old = list.querySelector(".morebtn"); if (old) old.remove();
+    rows.slice(made, S.vShown).forEach(v=>list.append(mk(v))); made = Math.min(rows.length, S.vShown);
+    if (rows.length <= made) return;
+    const more = el("button",{class:"btn ghost morebtn",style:"grid-column:1/-1",onclick:()=>{ S.vShown += 40; fill(); }}, `もっと見る（残り${rows.length-made}件）`);
+    list.append(more);
+    if ("IntersectionObserver" in window) {
+      moreIO = new IntersectionObserver(es=>{ if (es.some(e=>e.isIntersecting)) { S.vShown += 40; fill(); } }, {rootMargin:"600px"});
+      moreIO.observe(more);
+    }
+  };
+  fill();
 }
+let moreIO = null;
+const resetList = () => { S.vShown = 40; renderVisits(); };
 
 /* ---------- render: stats (M) ---------- */
 function renderStats(){
@@ -1214,7 +1425,12 @@ function renderCal(){
   });
   box.append(el("button",{class:"btn sm ghost",style:"align-self:flex-start",onclick:()=>{ openModal("new"); $("#fDate").value = sel; }},"＋ この日にお店を追加"));
 }
-function renderAll(){ renderVisits(); renderResults(); renderStats(); if (S.rightView==="cal" || $("#v-cal").classList.contains("on")) renderCal(); }
+function renderAll(){
+  renderVisits(); renderResults();
+  // 振り返り・カレンダーは、開いているときだけ作り直す（開いたときに毎回作るので、内容は古くならない）
+  if (S.rightView==="stats" || $("#v-stats").classList.contains("on")) renderStats();
+  if (S.rightView==="cal" || $("#v-cal").classList.contains("on")) renderCal();
+}
 
 /* ---------- modal: new / revisit / edit ---------- */
 function fillGenreSelect(){
@@ -1283,18 +1499,6 @@ async function addPhotos(files){
       S.newPhotos.push({thumb, full: toJpeg(im, 1600, .82)}); } catch(e){ toast("この画像は読み込めませんでした"); }
   }
   renderNewPhotos();
-}
-async function uploadPhotos(shopId, name, date, photos){
-  if (!photos.length) return;
-  toast(`写真を保存中…（${photos.length}枚）`);
-  let ok=0;
-  for (const p of photos) {
-    try { const j = await api("POST",{action:"photoAdd", shopId, name, date, thumb:p.thumb, full:p.full});
-      ok++; (S.photoCache[shopId] ||= []).push(j.photo); const v=S.visits.find(x=>x.id===shopId); if (v) v.photoCount=(v.photoCount||0)+1; }
-    catch(e){}
-  }
-  renderVisits();
-  toast(ok===photos.length ? "写真を保存しました" : `写真の保存に一部失敗しました（${ok}/${photos.length}枚）`);
 }
 // 「今いるお店」：近い順に3件ずつ。なくなったら範囲を広げて探し直す
 const HERE_RADII = [100, 250, 500], HERE_PAGE = 3;
@@ -1408,18 +1612,17 @@ function save(){
     }
   }
   closeModals();
-  if (photos.length && S.cfg && S.serverVer>=2) {
-    // 店の記録が送られてから写真を送る
-    const go = () => S.pending.length ? setTimeout(go, 500) : uploadPhotos(v.id, v.name, date, photos);
-    go();
-  }
+  // 写真は端末に保存してから送る（途中で閉じても、電波が悪くても、あとで自動的に送り直す）
+  if (photos.length && S.cfg && S.serverVer>=2) queuePhotos(v.id, v.name, date, photos).then(()=>toast(`写真を保存中…（${photos.length}枚）`));
 }
 let confirmAct=null;
-function askDelete(v){
-  $("#cTitle").textContent="削除しますか？";
-  $("#cText").textContent=`「${v.name}」の記録（${v.count}回分${v.photoCount?`・写真${v.photoCount}枚`:""}）を削除します。元に戻せません。`;
-  confirmAct=()=>{ commit({action:"delete",id:v.id}); toast("削除しました"); };
+function confirmBox(title, text, okLabel, act){
+  $("#cTitle").textContent=title; $("#cText").textContent=text; $("#cOk").textContent=okLabel; confirmAct=act;
   $("#confirm").classList.add("on");
+}
+function askDelete(v){
+  confirmBox("削除しますか？", `「${v.name}」の記録（${v.count}回分${v.photoCount?`・写真${v.photoCount}枚`:""}）を削除します。元に戻せません。`, "削除",
+    ()=>{ commit({action:"delete",id:v.id}); toast("削除しました"); });
 }
 function closeModals(){ document.querySelectorAll(".modal").forEach(m=>m.classList.remove("on")); }
 
@@ -1448,7 +1651,7 @@ function openSettings(){
     : S.serverVer<2 ? "スプレッドシート側（Code.gs）が旧版です。最新版に更新するとGoogleマップのデータが使えます。現在はOpenStreetMapを使用中です。"
     : S.placesOn ? "Googleマップのデータを使用中です（1日30回まで。超えたら自動でOpenStreetMapに切り替え）。"
     : "Googleマップの鍵が未登録のため、OpenStreetMapを使用中です。");
-  renderSaved(); renderDataLinks();
+  renderSaved(); renderDataLinks(); renderQueue();
   $("#settings").classList.add("on");
 }
 async function connect(){
@@ -1463,7 +1666,7 @@ async function connect(){
     const localOnly = S.visits.filter(v=>!server.has(v.id));
     S.pending = [...localOnly.map(v=>({action:"upsert",visit:cleanVisit(v)})), ...S.pending.filter(o=>!localOnly.some(v=>o.visit?.id===v.id))];
     saveCfg(S.cfg); saveLocal();
-    await pull();
+    await pull(true);
     m.append(el("div",{class:"ok"}, `✓ 接続できました（記録 ${S.visits.length}件）`));
     show("#shareBox", true); $("#shareUrl").value=shareLink();
   } catch(e){
@@ -1510,8 +1713,8 @@ $("#placeQ").addEventListener("keydown", e=>{ if(e.key==="Enter"&&!e.isComposing
 $("#radius").addEventListener("change", ()=>{ if(S.pos) searchAt(S.pos, S.placeLabel); });
 ["#order","#onlyNew","#hideClosed","#kidsOnly"].forEach(id=>$(id).addEventListener("change", renderResults));
 $("#noChain").addEventListener("change", e=>{ S.prefs.noChain = e.target.checked; savePrefs(); renderResults(); });
-$("#q").addEventListener("input", renderVisits);
-$("#sort").addEventListener("change", renderVisits);
+{ let t; $("#q").addEventListener("input", ()=>{ clearTimeout(t); t = setTimeout(resetList, 180); }); }   // 1文字ごとに作り直さない
+$("#sort").addEventListener("change", resetList);
 $("#pickNear").addEventListener("click", pickNear);
 $("#hereQuick").addEventListener("click", ()=>{ openModal("new"); pickNear(); });
 $("#paste").addEventListener("input", parsePaste);
@@ -1526,8 +1729,8 @@ $("#sLinkGo").addEventListener("click", ()=>{
   try { const j = JSON.parse(b64d(m[1])); if (!j.u || !j.t) throw 0; $("#sUrl").value = j.u; $("#sTok").value = j.t; $("#sLink").value = ""; connect(); }
   catch(e){ toast("リンクを読み取れませんでした"); }
 });
-$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.serverVer=0; S.placesOn=null; S.sheetUrl=""; S.photoUrl=""; clearCfg(); ls.del("gn-links"); renderDataLinks(); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
-$("#syncNow").addEventListener("click", async ()=>{ await pull(); toast(S.syncState==="ok"?"同期しました":"同期できませんでした"); });
+$("#sOff").addEventListener("click", ()=>{ S.cfg=null; S.pending=[]; S.parked=[]; S.serverVer=0; S.placesOn=null; S.sheetUrl=""; S.photoUrl=""; S.lastPull=0; clearTimeout(S.flushT); clearTimeout(S.retryT); S.flushT=S.retryT=null; PQ.clear().then(()=>{ S.photoQ=0; renderQueue(); }); clearCfg(); ls.del("gn-links"); ls.del(K.srv); renderDataLinks(); saveLocal(); setSync("local"); renderBanner(); closeModals(); toast("同期をやめました（この端末の記録は残ります）"); });
+$("#syncNow").addEventListener("click", async ()=>{ await pull(true); if (S.syncState==="ok") sendPhotos(true); toast(S.syncState==="ok"?"同期しました":"同期できませんでした"); });
 $("#shareCopy").addEventListener("click", async ()=>{ try{ await navigator.clipboard.writeText($("#shareUrl").value); toast("コピーしました"); }catch(e){ $("#shareUrl").select(); toast("選択してコピーしてください"); } });
 $("#pAuto").addEventListener("change", e=>{ S.prefs.autoSearchOn=e.target.checked; savePrefs(); });
 $("#pTime").addEventListener("change", e=>{ S.prefs.timeAdjust=e.target.checked; savePrefs(); renderResults(); });
@@ -1536,33 +1739,53 @@ $("#calPrev").addEventListener("click", ()=>{ if(!S.calMonth) renderCal(); S.cal
 $("#calNext").addEventListener("click", ()=>{ if(!S.calMonth) renderCal(); S.calMonth = new Date(S.calMonth.getFullYear(), S.calMonth.getMonth()+1, 1); renderCal(); });
 $("#calToday").addEventListener("click", ()=>{ const t=new Date(); S.calMonth = new Date(t.getFullYear(), t.getMonth(), 1); S.calSel = today(); renderCal(); });
 $("#plName").addEventListener("keydown", e=>{ if(e.key==="Enter"&&!e.isComposing) savePlace(); });
-document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && S.cfg) pull(); });
-window.addEventListener("hashchange", ()=>{ if (readSetupHash()) pull(); });
-window.addEventListener("online", ()=>{ if(S.cfg) flush(false); });
+document.addEventListener("visibilitychange", ()=>{
+  if (!S.cfg) return;
+  if (document.visibilityState==="visible") pull();
+  else if (S.flushT) { clearTimeout(S.flushT); S.flushT = null; flush(false); }   // 画面を離れるときは、まとめ待ちの記録をすぐ送る
+});
+window.addEventListener("pagehide", ()=>{ if (S.cfg && S.flushT) { clearTimeout(S.flushT); S.flushT = null; flush(false); } });
+window.addEventListener("hashchange", ()=>{ if (readSetupHash()) pull(true); });
+window.addEventListener("online", ()=>{ if (S.cfg) { S.retryN = 0; if (S.syncState==="error") pull(true); else kick(); } });
 
 /* ---------- init ---------- */
 S.cfg = loadCfg();
 S.visits = ls.get(K.cache, []).filter(v=>v&&v.id&&v.name).map(normalizeVisit);
-S.pending = ls.get(K.pend, []);
+S.pending = ls.get(K.pend, []).filter(o=>o && (o.action==="delete" ? o.id : o.action==="upsert" && o.visit && o.visit.id));
+S.parked = ls.get(K.park, []).filter(o=>o && o.action);
+for (const op of [...S.parked, ...S.pending]) S.visits = applyOp(S.visits, op);
+if (S.cfg) { const sv = ls.get(K.srv, null); if (sv) { S.serverVer = Number(sv.v)||0; S.placesOn = sv.p ?? null; } }   // 前回わかったサーバーの状態
 S.prefs = {...S.prefs, ...ls.get(K.prefs, {})};
 S.settings = {savedPlaces:[], ...ls.get(K.settings, {})};
 { const l = ls.get("gn-links", {}); S.sheetUrl = l.s||""; S.photoUrl = l.p||""; }
 readSetupHash();
 $("#noChain").checked = !!S.prefs.noChain;
+touchVisits();
 fillGenreSelect(); renderGenres(); renderSaved(); renderAll(); renderAttr(); renderDataLinks();
 setSync(S.cfg ? "syncing" : "local");
-const pulled = pull();
+const pulled = pull(true);
+PQ.all().then(a=>{ S.photoQ = a.length; if (a.length) setSync(S.syncState); }).catch(()=>{});
 // N: 開いたら自動で現在地検索（位置情報がすでに許可されているときだけ）
 (async ()=>{
   if (!S.prefs.autoSearchOn) return;   // 初期設定はオフ（ボタンを押すまで検索しない）
   try {
     if (!navigator.permissions) return;
     const st = await navigator.permissions.query({name:"geolocation"});
-    if (st.state==="granted") { await Promise.race([pulled, new Promise(r=>setTimeout(r,2500))]); if (!S.pos && !S.searching && !$("#locate").disabled) locate(); }
+    if (st.state==="granted") { if (S.cfg && !S.serverVer) await Promise.race([pulled, new Promise(r=>setTimeout(r,2500))]); if (!S.pos && !S.searching && !$("#locate").disabled) locate(); }
   } catch(e){}
 })();
 // O: オフラインでも開けるように
-if ("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+// 画面は保存済みのものをすぐ表示し、新しい版は裏で取り込む。取り込めたら、操作のじゃまにならないときだけ自動で切り替える
+if ("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")) {
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+  navigator.serviceWorker.ready.then(r=>{ if (r.active) r.active.postMessage({type:"gn-check"}); }).catch(()=>{});
+  navigator.serviceWorker.addEventListener("message", e=>{
+    if (!e.data || e.data.type!=="gn-update" || $("#updBtn")) return;
+    const busy = () => document.querySelector(".modal.on") || $("#locate").disabled || S.pos || S.searching || S.pending.length || (S.photoBusy && S.photoQ) || $("#q").value || $("#placeQ").value;
+    if (!busy() && !sessionStorage.getItem("gn-upd")) { try { sessionStorage.setItem("gn-upd","1"); } catch(x){} location.reload(); return; }
+    document.body.append(el("button",{class:"btn upd",id:"updBtn",onclick:()=>location.reload()},"🔄 新しい版があります（タップで更新）"));
+  });
+}
 })();
 </script>
 </body>
