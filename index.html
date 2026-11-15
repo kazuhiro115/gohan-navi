@@ -103,6 +103,8 @@ details.alt summary{font-size:13px;color:var(--accent-d);font-weight:700;cursor:
 .gr{font-weight:700;color:var(--ink)}
 .hours{font-size:12px;color:var(--sub);word-break:break-all}
 .acts{display:flex;gap:6px}.acts>*{flex:1;min-width:0;padding-left:6px;padding-right:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acts.four{display:grid;grid-template-columns:1fr 1fr}
+@media (min-width:720px){.hero .acts.four{grid-template-columns:repeat(4,1fr)}}
 .stackbtns{display:flex;flex-direction:column;gap:8px}
 .stackbtns>*{width:100%}
 @media (min-width:1100px){.stackbtns{flex-direction:row}.stackbtns>*{flex:1}}
@@ -1192,6 +1194,11 @@ function renderWhere(){
     el("button",{class:"linkbtn",onclick:openPlaceSave},"📌 この場所を保存"),
     S.timing && el("span",{style:"color:var(--sub);font-size:11px;width:100%"}, "⏱ "+S.timing));
 }
+// Googleの口コミ。Googleのデータの店は口コミの一覧を直接開く。地図データ（OpenStreetMap）の店は場所IDがないので、Googleマップで店名を検索する
+function reviewsUrl(s){
+  const pid = s.pid || s.placeId;
+  return pid ? "https://search.google.com/local/reviews?placeid="+encodeURIComponent(pid) : mapsSearch(s.name+" "+(s.addr||S.placeLabel||"")+" 口コミ");
+}
 function shopCard(s, opts={}){
   const g = s.rating ? el("span",{class:"gr"}, `Google★${s.rating.toFixed(1)}`, el("span",{style:"color:var(--sub);font-weight:400"},`（${s.n}）`)) : null;
   const mapHref = s.uri || mapsSearch(s.name+" "+(s.addr||S.placeLabel||""));
@@ -1203,8 +1210,9 @@ function shopCard(s, opts={}){
       s.v && el("span",{style:"color:var(--accent-d);font-weight:700"}, `${s.v.count}回・${s.v.avg?("平均★"+s.v.avg.toFixed(1)):"未評価"}`)),
     opts.hero ? el("div",{class:"reason"}, heroReason(s)) : el("div",{class:"why"}, s.why.map(x=>el("span",{class:x.neg?"neg":""},x.t))),
     s.hours && el("div",{class:"hours"},"🕒 "+s.hours),
-    el("div",{class:"acts"},
+    el("div",{class:"acts four"},
       el("a",{class:"btn sm plain",href:mapHref,target:"_blank",rel:"noopener"},"🗺 地図"),
+      el("a",{class:"btn sm plain",href:reviewsUrl(s),target:"_blank",rel:"noopener","aria-label":s.name+" のGoogleの口コミ"},"💬 口コミ"),
       el("a",{class:"btn sm plain",href:routeUrl(s),target:"_blank",rel:"noopener"},"🚶 経路"),
       el("button",{class:"btn sm",onclick:()=> s.v ? openModal("revisit", s.v) : openModal("new", {name:s.name,genre:s.genre,lat:s.src==="osm"?s.lat:null,lng:s.src==="osm"?s.lng:null,osmId:s.osmId||"",placeId:s.pid||"",url:s.uri||"",area:s.addr||S.placeLabel||""})}, "✅ 行った"))
   );
