@@ -1,5 +1,5 @@
 /**
- * ごはんナビ 記録保存用サーバー（Google Apps Script） v2
+ * ごはんナビ 記録保存用サーバー（Google Apps Script） v3
  *
  * 保存するもの：
  *  - visits シート … 行った店（訪問履歴は log 列に保存）
@@ -8,10 +8,16 @@
  * Googleマップの店舗検索：スクリプト プロパティに PLACES_KEY を登録すると有効になります。
  *
  * 更新したら：デプロイ → デプロイを管理 → 鉛筆 → バージョン「新バージョン」→ デプロイ
- * （URLは変わりません）
+ * （URLと合言葉は変わりません。setup の再実行は不要です）
+ *
+ * v3 の変更点：
+ *  - 訪問履歴の突き合わせ（別の端末が足した訪問を、あとから保存した端末が消さない）
+ *  - 記録の読み込みを POST でも受け付ける（合言葉をURLに載せない）
+ *  - 毎回の書式の書き直しをやめ、写真の件数は必要な列だけ読む（速くなる）
+ *  - Googleマップ検索：近い順の指定、ジャンルを指定した探し直し
  */
 
-const VERSION = 2;
+const VERSION = 3;
 const SHEET_NAME = 'visits';
 const HEAD = ['id', 'name', 'genre', 'area', 'date', 'rating', 'memo', 'url', 'lat', 'lng', 'osmId', 'placeId', 'log', 'createdAt', 'updatedAt'];
 const PHOTO_SHEET = 'photos';
@@ -20,11 +26,12 @@ const PHOTO_FOLDER = 'ごはんナビ写真';
 // Googleマップ検索の1日の上限回数（無料枠：月1,000回 → 30回×30日＝900回で収まる）
 const DAILY_PLACES_LIMIT = 30;
 
-/** 初回・更新時に実行：シート準備、合言葉の発行、権限の承認 */
+/** 初回に実行：シート準備、合言葉の発行、権限の承認（更新のたびに実行する必要はありません） */
 function setup() {
+  const props = PropertiesService.getScriptProperties();
+  props.deleteProperty('SCHEMA');
   sheet_();
   photoSheet_();
-  const props = PropertiesService.getScriptProperties();
   let token = props.getProperty('TOKEN');
   if (!token) {
     token = Utilities.getUuid().replace(/-/g, '').slice(0, 20);
@@ -48,6 +55,7 @@ function resetToken() {
 }
 
 /* ---------- シート ---------- */
+// 見出しと書式（文字列）を整える。時間がかかるので、シートを作ったとき・版が変わったときだけ行う
 function ensureHeader_(s, head) {
   const lastCol = Math.max(s.getLastColumn(), 1);
   const cur = s.getRange(1, 1, 1, lastCol).getDisplayValues()[0];
@@ -60,20 +68,24 @@ function ensureHeader_(s, head) {
   }
   s.getRange(1, 1, s.getMaxRows(), s.getLastColumn()).setNumberFormat('@');
 }
-function sheet_() {
+function ensureSchema_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SCHEMA') === String(VERSION)) return;
   const ss = SpreadsheetApp.getActive();
-  let s = ss.getSheetByName(SHEET_NAME);
-  if (!s) s = ss.insertSheet(SHEET_NAME);
-  ensureHeader_(s, HEAD);
+  [[SHEET_NAME, HEAD], [PHOTO_SHEET, PHOTO_HEAD]].forEach(([name, head]) => {
+    ensureHeader_(ss.getSheetByName(name) || ss.insertSheet(name), head);
+  });
+  props.setProperty('SCHEMA', String(VERSION));
+}
+function getSheet_(name, head) {
+  ensureSchema_();
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(name);
+  if (!s) { s = ss.insertSheet(name); ensureHeader_(s, head); } // 消されていたら作り直す
   return s;
 }
-function photoSheet_() {
-  const ss = SpreadsheetApp.getActive();
-  let s = ss.getSheetByName(PHOTO_SHEET);
-  if (!s) s = ss.insertSheet(PHOTO_SHEET);
-  ensureHeader_(s, PHOTO_HEAD);
-  return s;
-}
+function sheet_() { return getSheet_(SHEET_NAME, HEAD); }
+function photoSheet_() { return getSheet_(PHOTO_SHEET, PHOTO_HEAD); }
 function photoFolder_() {
   const it = DriveApp.getFoldersByName(PHOTO_FOLDER);
   const f = it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER);
@@ -81,11 +93,17 @@ function photoFolder_() {
   if (props.getProperty('PHOTO_FOLDER_URL') !== f.getUrl()) props.setProperty('PHOTO_FOLDER_URL', f.getUrl());
   return f;
 }
-function header_(s) { return s.getRange(1, 1, 1, s.getLastColumn()).getDisplayValues()[0]; }
+function header_(s) { return s.getRange(1, 1, 1, Math.max(s.getLastColumn(), 1)).getDisplayValues()[0]; }
 function rows_(s) {
   const v = s.getDataRange().getDisplayValues();
   const head = v.shift() || [];
   return { head, rows: v };
+}
+/** 1列だけ読む（2行目以降）。大きな列（写真の縮小版など）を読まずに済ませる */
+function col_(s, head, name) {
+  const i = head.indexOf(name), n = s.getLastRow() - 1;
+  if (i < 0 || n < 1) return [];
+  return s.getRange(2, i + 1, n, 1).getDisplayValues().map(r => r[0]);
 }
 
 function out_(obj) {
@@ -103,10 +121,10 @@ function safe_(v) {
 /* ---------- 記録 ---------- */
 function list_() {
   const { head, rows } = rows_(sheet_());
+  // 写真の件数は shopId の列だけを読んで数える
+  const ps = photoSheet_();
   const counts = {};
-  const p = rows_(photoSheet_());
-  const si = p.head.indexOf('shopId');
-  p.rows.forEach(r => { if (r[si]) counts[r[si]] = (counts[r[si]] || 0) + 1; });
+  col_(ps, header_(ps), 'shopId').forEach(id => { if (id) counts[id] = (counts[id] || 0) + 1; });
   return rows.filter(r => r[0]).map(r => {
     const o = {};
     head.forEach((k, i) => { if (k) o[k] = r[i]; });
@@ -114,34 +132,67 @@ function list_() {
     return o;
   });
 }
+function parseLog_(v) {
+  try {
+    const a = typeof v === 'string' ? (v ? JSON.parse(v) : []) : (Array.isArray(v) ? v : []);
+    return a.filter(x => x && typeof x === 'object');
+  } catch (e) { return []; }
+}
+/**
+ * 訪問履歴の突き合わせ。
+ * base … 送ってきた端末が「サーバーにある」と知っていた訪問のID一覧。
+ * サーバーにあって base に無い訪問は、別の端末があとから足したものなので残す。
+ * base にあって送られてこなかった訪問は、その端末が消したものなので消す。
+ */
+function mergeLog_(clientLog, serverLog, base) {
+  const known = {}, mine = {};
+  base.forEach(id => { known[String(id)] = true; });
+  clientLog.forEach(x => { if (x.id) mine[String(x.id)] = true; });
+  const extra = serverLog.filter(x => x.id && !known[String(x.id)] && !mine[String(x.id)]);
+  if (!extra.length) return clientLog;
+  return clientLog.concat(extra).sort((a, b) => String(a.d || '').localeCompare(String(b.d || '')));
+}
 function upsert_(v) {
   if (!v || !v.id || !v.name) throw new Error('id と name は必須です');
   const s = sheet_();
   const head = header_(s);
   const ids = s.getRange(1, 1, Math.max(s.getLastRow(), 1), 1).getDisplayValues().map(r => r[0]);
+  const idx = ids.indexOf(String(v.id));
+  const r = idx >= 1 ? idx + 1 : s.getLastRow() + 1;
+  if (idx >= 1 && Array.isArray(v.baseLog) && Array.isArray(v.log)) {
+    const li = head.indexOf('log');
+    const cur = li >= 0 ? parseLog_(s.getRange(r, li + 1).getDisplayValue()) : [];
+    const merged = mergeLog_(v.log, cur, v.baseLog);
+    if (merged !== v.log) {
+      v.log = merged;
+      const last = merged[merged.length - 1] || {};
+      v.date = last.d || ''; v.rating = Number(last.r) || 0; v.memo = last.m || '';
+    }
+  }
   v.updatedAt = String(Date.now());
   if (!v.createdAt) v.createdAt = v.updatedAt;
   if (Array.isArray(v.log)) v.log = JSON.stringify(v.log);
   const row = head.map(k => safe_(v[k]));
-  const idx = ids.indexOf(String(v.id));
-  const r = idx >= 1 ? idx + 1 : s.getLastRow() + 1;
   s.getRange(r, 1, 1, head.length).setNumberFormat('@').setValues([row]);
+}
+/** 写真の行を（下から）消す。ドライブ上の画像はゴミ箱へ */
+function removePhotoRows_(colName, value) {
+  const ps = photoSheet_();
+  const head = header_(ps);
+  const keys = col_(ps, head, colName), files = col_(ps, head, 'fileId');
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (keys[i] === String(value)) {
+      try { if (files[i]) DriveApp.getFileById(files[i]).setTrashed(true); } catch (e) {}
+      ps.deleteRow(i + 2);
+    }
+  }
 }
 function delete_(id) {
   const s = sheet_();
   const ids = s.getRange(1, 1, Math.max(s.getLastRow(), 1), 1).getDisplayValues().map(r => r[0]);
   const idx = ids.indexOf(String(id));
   if (idx >= 1) s.deleteRow(idx + 1);
-  // その店の写真も削除（ドライブ上の画像はゴミ箱へ）
-  const ps = photoSheet_();
-  const { head, rows } = rows_(ps);
-  const si = head.indexOf('shopId'), fi = head.indexOf('fileId');
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i][si] === String(id)) {
-      try { if (rows[i][fi]) DriveApp.getFileById(rows[i][fi]).setTrashed(true); } catch (e) {}
-      ps.deleteRow(i + 2);
-    }
-  }
+  removePhotoRows_('shopId', id); // その店の写真も削除
 }
 
 /* ---------- 写真 ---------- */
@@ -159,23 +210,19 @@ function photoAdd_(b) {
   return { id, shopId: o.shopId, date: o.date, thumb: o.thumb, driveUrl: o.driveUrl };
 }
 function photos_(shopId) {
-  const { head, rows } = rows_(photoSheet_());
-  const ix = k => head.indexOf(k);
-  return rows.filter(r => r[ix('shopId')] === String(shopId)).map(r => ({
-    id: r[ix('id')], date: r[ix('date')], thumb: r[ix('thumb')], driveUrl: r[ix('driveUrl')]
-  }));
-}
-function photoDelete_(id) {
   const ps = photoSheet_();
-  const { head, rows } = rows_(ps);
-  const ii = head.indexOf('id'), fi = head.indexOf('fileId');
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i][ii] === String(id)) {
-      try { if (rows[i][fi]) DriveApp.getFileById(rows[i][fi]).setTrashed(true); } catch (e) {}
-      ps.deleteRow(i + 2);
-    }
-  }
+  const head = header_(ps);
+  const ix = k => head.indexOf(k);
+  // shopId の列で行を探し、その店の行だけを読む
+  const out = [];
+  col_(ps, head, 'shopId').forEach((id, i) => {
+    if (id !== String(shopId)) return;
+    const r = ps.getRange(i + 2, 1, 1, head.length).getDisplayValues()[0];
+    out.push({ id: r[ix('id')], date: r[ix('date')], thumb: r[ix('thumb')], driveUrl: r[ix('driveUrl')] });
+  });
+  return out;
 }
+function photoDelete_(id) { removePhotoRows_('id', id); }
 
 /* ---------- 設定（保存した場所など） ---------- */
 function settings_() {
@@ -192,9 +239,29 @@ const FIELDS_FULL = 'places.id,places.displayName,places.location,places.primary
 const FIELDS_BASIC = 'places.id,places.displayName,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours.openNow,places.regularOpeningHours.weekdayDescriptions,places.shortFormattedAddress,places.googleMapsUri';
 const TYPES_FULL = ['restaurant', 'cafe', 'bar', 'coffee_shop', 'fast_food_restaurant'];
 const TYPES_BASIC = ['restaurant', 'cafe', 'bar'];
+/**
+ * ジャンルを指定して探し直すときの、Googleの「場所の種類」。
+ * full … 細かい種類まで指定（受け付けられなければ safe で再試行）
+ * exact … その種類がジャンルとほぼ一致する（true のとき、アプリは結果をそのジャンルとして扱う）
+ */
+const GENRE_TYPES = {
+  'ラーメン': { full: ['ramen_restaurant'], safe: ['ramen_restaurant'], exact: true },
+  '居酒屋・バー': { full: ['japanese_izakaya_restaurant', 'yakitori_restaurant', 'bar', 'pub', 'wine_bar'], safe: ['bar', 'pub'], exact: true },
+  'カフェ': { full: ['cafe', 'coffee_shop'], safe: ['cafe'], exact: true },
+  '焼肉': { full: ['yakiniku_restaurant', 'korean_barbecue_restaurant', 'barbecue_restaurant', 'korean_restaurant'], safe: ['barbecue_restaurant', 'korean_restaurant'], exact: true },
+  '寿司': { full: ['sushi_restaurant'], safe: ['sushi_restaurant'], exact: true },
+  '中華': { full: ['chinese_restaurant'], safe: ['chinese_restaurant'], exact: true },
+  'そば・うどん': { full: ['japanese_restaurant'], safe: ['japanese_restaurant'], exact: false },
+  'カレー': { full: ['japanese_curry_restaurant', 'indian_restaurant'], safe: ['indian_restaurant'], exact: true },
+  '定食・和食': { full: ['japanese_restaurant', 'tonkatsu_restaurant'], safe: ['japanese_restaurant'], exact: false },
+  'イタリアン': { full: ['italian_restaurant', 'pizza_restaurant'], safe: ['italian_restaurant', 'pizza_restaurant'], exact: true },
+  'ファストフード': { full: ['fast_food_restaurant', 'hamburger_restaurant'], safe: ['fast_food_restaurant'], exact: true }
+};
 
 // Googleの規約により店舗情報は保存（キャッシュ）しない。場所IDのみ記録に残す。
-function placesNearby_(lat, lng, radius) {
+// opt.rank = 'distance' … 近い順（「今いるお店」用）。opt.genre … ジャンルを指定して探す
+function placesNearby_(lat, lng, radius, opt) {
+  opt = opt || {};
   const props = PropertiesService.getScriptProperties();
   const key = props.getProperty('PLACES_KEY');
   if (!key) return { ok: false, error: 'no_places_key' };
@@ -203,22 +270,27 @@ function placesNearby_(lat, lng, radius) {
   const day = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   const cKey = 'PLACES_COUNT_' + day;
   const used = Number(props.getProperty(cKey) || 0);
-  if (used >= DAILY_PLACES_LIMIT) return { ok: false, error: 'daily_limit', used };
+  if (used >= DAILY_PLACES_LIMIT) return { ok: false, error: 'daily_limit', used, limit: DAILY_PLACES_LIMIT };
 
-  const attempts = [[FIELDS_FULL, TYPES_FULL], [FIELDS_BASIC, TYPES_FULL], [FIELDS_BASIC, TYPES_BASIC]];
+  const gt = opt.genre ? GENRE_TYPES[opt.genre] : null;
+  const full = gt ? gt.full : TYPES_FULL, safe = gt ? gt.safe : TYPES_BASIC;
+  const rank = opt.rank === 'distance' ? 'DISTANCE' : 'POPULARITY';
+  // 400（項目や種類の指定が受け付けられない）のときだけ、控えめな条件で再試行する
+  const attempts = [[FIELDS_FULL, full], [FIELDS_FULL, safe], [FIELDS_BASIC, full], [FIELDS_BASIC, safe]]
+    .filter((a, i, all) => all.findIndex(b => b[0] === a[0] && b[1].join() === a[1].join()) === i);
   let res, code, text;
   for (const [fields, types] of attempts) {
     res = UrlFetchApp.fetch('https://places.googleapis.com/v1/places:searchNearby', {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
       headers: { 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': fields },
       payload: JSON.stringify({
-        includedTypes: types, maxResultCount: 20, rankPreference: 'POPULARITY',
+        includedTypes: types, maxResultCount: 20, rankPreference: rank,
         languageCode: 'ja', regionCode: 'JP',
         locationRestriction: { circle: { center: { latitude: lat, longitude: lng }, radius } }
       })
     });
     code = res.getResponseCode(); text = res.getContentText();
-    if (code !== 400) break; // 400（項目や種類の指定ミス）のときだけ控えめな条件で再試行
+    if (code !== 400) break;
   }
   props.setProperty(cKey, String(used + 1));
   // 古い日付のカウンターを掃除
@@ -236,16 +308,20 @@ function placesNearby_(lat, lng, radius) {
       addr: p.shortFormattedAddress || '', uri: p.googleMapsUri || ''
     };
   }).filter(p => p.name && p.lat != null);
-  return { ok: true, places, src: 'google', used: used + 1 };
+  return { ok: true, places, src: 'google', used: used + 1, limit: DAILY_PLACES_LIMIT, rank: rank.toLowerCase(), genre: gt ? opt.genre : '', exact: !!(gt && gt.exact) };
 }
 
 /* ---------- 入口 ---------- */
+function listOut_() {
+  const props = PropertiesService.getScriptProperties();
+  return { ok: true, ver: VERSION, visits: list_(), settings: settings_(), places: !!props.getProperty('PLACES_KEY'),
+    sheetUrl: SpreadsheetApp.getActive().getUrl(), photoUrl: props.getProperty('PHOTO_FOLDER_URL') || '' };
+}
+// 旧版のアプリ（更新前の画面が残っている端末）用。新しいアプリは POST の list を使い、合言葉をURLに載せない
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (!authorized_(p.token)) return out_({ ok: false, error: 'auth' });
-  const props = PropertiesService.getScriptProperties();
-  return out_({ ok: true, ver: VERSION, visits: list_(), settings: settings_(), places: !!props.getProperty('PLACES_KEY'),
-    sheetUrl: SpreadsheetApp.getActive().getUrl(), photoUrl: props.getProperty('PHOTO_FOLDER_URL') || '' });
+  return out_(listOut_());
 }
 
 function doPost(e) {
@@ -254,7 +330,8 @@ function doPost(e) {
   if (!authorized_(b.token)) return out_({ ok: false, error: 'auth' });
   try {
     // 読み取り系はロック不要
-    if (b.action === 'nearby') return out_(placesNearby_(b.lat, b.lng, b.radius));
+    if (b.action === 'list') return out_(listOut_());
+    if (b.action === 'nearby') return out_(placesNearby_(b.lat, b.lng, b.radius, { rank: b.rank, genre: b.genre }));
     if (b.action === 'photos') return out_({ ok: true, photos: photos_(b.shopId) });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message || err) });
