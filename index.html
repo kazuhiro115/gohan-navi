@@ -1020,7 +1020,7 @@ async function fetchGoogle(lat,lng,radius,opt={}){
   if (j.used!=null) { S.used = j.used; S.limit = j.limit || 30; }
   const shops = (j.places||[]).map(p=>({src:"google", pid:p.pid, name:p.name, genre:(j.exact && j.genre) || detectGenreG(p), lat:p.lat, lng:p.lng,
     rating:p.rating, n:p.n, price:PRICE[p.price]||"", open:p.open, nextClose:p.nextClose, nextOpen:p.nextOpen,
-    hours:(p.hours&&p.hours[di]||"").replace(/^[^:：]+[:：]\s*/,""), kids:p.kids, addr:p.addr, uri:p.uri}));
+    hours:(p.hours&&p.hours[di]||"").replace(/^[^:：]+[:：]\s*/,""), kids:p.kids, addr:p.addr, uri:p.uri, rev:p.rev||""}));
   return {shops, src:"google", label:"Googleマップ", used:j.used};
 }
 function googleReason(){
@@ -1194,10 +1194,10 @@ function renderWhere(){
     el("button",{class:"linkbtn",onclick:openPlaceSave},"📌 この場所を保存"),
     S.timing && el("span",{style:"color:var(--sub);font-size:11px;width:100%"}, "⏱ "+S.timing));
 }
-// Googleの口コミ。Googleのデータの店は口コミの一覧を直接開く。地図データ（OpenStreetMap）の店は場所IDがないので、Googleマップで店名を検索する
+// Googleの口コミ。Googleが返す公式リンク（Googleマップでその店の口コミを開く）を使う。
+// 公式リンクがないとき（Code.gsが旧版など）は店のGoogleマップのページ、地図データ（OpenStreetMap）の店はGoogleマップで店名を検索する
 function reviewsUrl(s){
-  const pid = s.pid || s.placeId;
-  return pid ? "https://search.google.com/local/reviews?placeid="+encodeURIComponent(pid) : mapsSearch(s.name+" "+(s.addr||S.placeLabel||"")+" 口コミ");
+  return safeUrl(s.rev) || safeUrl(s.uri) || mapsSearch(s.name+" "+(s.addr||S.placeLabel||"")+" 口コミ");
 }
 function shopCard(s, opts={}){
   const g = s.rating ? el("span",{class:"gr"}, `Google★${s.rating.toFixed(1)}`, el("span",{style:"color:var(--sub);font-weight:400"},`（${s.n}）`)) : null;

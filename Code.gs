@@ -14,7 +14,7 @@
  *  - 訪問履歴の突き合わせ（別の端末が足した訪問を、あとから保存した端末が消さない）
  *  - 記録の読み込みを POST でも受け付ける（合言葉をURLに載せない）
  *  - 毎回の書式の書き直しをやめ、写真の件数は必要な列だけ読む（速くなる）
- *  - Googleマップ検索：近い順の指定、ジャンルを指定した探し直し
+ *  - Googleマップ検索：近い順の指定、ジャンルを指定した探し直し、口コミを開く公式リンク
  */
 
 const VERSION = 3;
@@ -235,7 +235,7 @@ function settingsSet_(st) {
 }
 
 /* ---------- Googleマップ検索（Places API New: Nearby Search） ---------- */
-const FIELDS_FULL = 'places.id,places.displayName,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours.openNow,places.currentOpeningHours.nextCloseTime,places.currentOpeningHours.nextOpenTime,places.regularOpeningHours.weekdayDescriptions,places.goodForChildren,places.shortFormattedAddress,places.googleMapsUri';
+const FIELDS_FULL = 'places.id,places.displayName,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours.openNow,places.currentOpeningHours.nextCloseTime,places.currentOpeningHours.nextOpenTime,places.regularOpeningHours.weekdayDescriptions,places.goodForChildren,places.shortFormattedAddress,places.googleMapsUri,places.googleMapsLinks.reviewsUri';
 const FIELDS_BASIC = 'places.id,places.displayName,places.location,places.primaryType,places.types,places.rating,places.userRatingCount,places.priceLevel,places.currentOpeningHours.openNow,places.regularOpeningHours.weekdayDescriptions,places.shortFormattedAddress,places.googleMapsUri';
 const TYPES_FULL = ['restaurant', 'cafe', 'bar', 'coffee_shop', 'fast_food_restaurant'];
 const TYPES_BASIC = ['restaurant', 'cafe', 'bar'];
@@ -305,7 +305,8 @@ function placesNearby_(lat, lng, radius, opt) {
       type: p.primaryType || '', types: (p.types || []).slice(0, 6), rating: p.rating || null, n: p.userRatingCount || 0,
       price: p.priceLevel || '', open: (co.openNow === undefined ? null : co.openNow), nextClose: co.nextCloseTime || '', nextOpen: co.nextOpenTime || '',
       hours: (p.regularOpeningHours && p.regularOpeningHours.weekdayDescriptions) || [], kids: (p.goodForChildren === undefined ? null : p.goodForChildren),
-      addr: p.shortFormattedAddress || '', uri: p.googleMapsUri || ''
+      addr: p.shortFormattedAddress || '', uri: p.googleMapsUri || '',
+      rev: (p.googleMapsLinks && p.googleMapsLinks.reviewsUri) || '' // Googleマップでその店の口コミを開く公式リンク
     };
   }).filter(p => p.name && p.lat != null);
   return { ok: true, places, src: 'google', used: used + 1, limit: DAILY_PLACES_LIMIT, rank: rank.toLowerCase(), genre: gt ? opt.genre : '', exact: !!(gt && gt.exact) };
